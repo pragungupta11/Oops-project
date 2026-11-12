@@ -23,4 +23,7 @@ public class Technician {
     public Set<String> getSkills() { return skills; }
     public int getActiveIncidents() { return activeIncidents; }
     public boolean isAvailable() { return available; }
+    public void incrementActiveIncidents() {
+        this.activeIncidents++;
+    }
 }
