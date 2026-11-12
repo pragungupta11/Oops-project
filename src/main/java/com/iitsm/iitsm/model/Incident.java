@@ -16,6 +16,7 @@ public class Incident {
     private Technician assignedTechnician;
     private LocalDateTime acknowledgedAt;
     private LocalDateTime resolvedAt;
+    private EscalationLevel escalationLevel = EscalationLevel.TECHNICIAN;
 
     public Incident(String id, String description, String category,
                     int impact, int urgency, int criticality,
@@ -51,4 +52,7 @@ public class Incident {
 
     public LocalDateTime getResolvedAt() { return resolvedAt; }
     public void setResolvedAt(LocalDateTime t) { this.resolvedAt = t; }
+    
+    public EscalationLevel getEscalationLevel() { return escalationLevel; }
+    public void setEscalationLevel(EscalationLevel level) { this.escalationLevel = level; }
 }
