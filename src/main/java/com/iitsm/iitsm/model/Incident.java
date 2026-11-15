@@ -2,6 +2,9 @@ package com.iitsm.iitsm.model;
 
 import java.time.LocalDateTime;
 
+import com.iitsm.iitsm.state.IncidentState;
+import com.iitsm.iitsm.state.IncidentStates;
+
 public class Incident {
     private final String id;
     private final String description;
@@ -12,10 +15,15 @@ public class Incident {
     private final LocalDateTime createdAt;
 
     private Priority priority;
-    private IncidentStatus status = IncidentStatus.NEW;
+    private IncidentState state = IncidentStates.of(IncidentStatus.NEW);
     private Technician assignedTechnician;
     private LocalDateTime acknowledgedAt;
     private LocalDateTime resolvedAt;
+    private EscalationLevel escalationLevel = EscalationLevel.TECHNICIAN;
+
+    private User reporter;
+    private ItService affectedService;
+    private String resolution;
 
     public Incident(String id, String description, String category,
                     int impact, int urgency, int criticality,
@@ -40,8 +48,17 @@ public class Incident {
     public Priority getPriority() { return priority; }
     public void setPriority(Priority priority) { this.priority = priority; }
 
-    public IncidentStatus getStatus() { return status; }
-    public void setStatus(IncidentStatus status) { this.status = status; }
+    public IncidentStatus getStatus() { return state.status(); }
+
+    /** Enforced move: throws InvalidStateTransitionException if illegal. */
+    public void transitionTo(IncidentStatus target) {
+        this.state = state.transitionTo(target);
+    }
+
+    /** Unchecked jump, kept so existing tests and setup code still compile. Prefer transitionTo. */
+    public void setStatus(IncidentStatus status) {
+        this.state = IncidentStates.of(status);
+    }
 
     public Technician getAssignedTechnician() { return assignedTechnician; }
     public void setAssignedTechnician(Technician t) { this.assignedTechnician = t; }
@@ -51,4 +68,16 @@ public class Incident {
 
     public LocalDateTime getResolvedAt() { return resolvedAt; }
     public void setResolvedAt(LocalDateTime t) { this.resolvedAt = t; }
+
+    public EscalationLevel getEscalationLevel() { return escalationLevel; }
+    public void setEscalationLevel(EscalationLevel level) { this.escalationLevel = level; }
+
+    public User getReporter() { return reporter; }
+    public void setReporter(User reporter) { this.reporter = reporter; }
+
+    public ItService getAffectedService() { return affectedService; }
+    public void setAffectedService(ItService s) { this.affectedService = s; }
+
+    public String getResolution() { return resolution; }
+    public void setResolution(String resolution) { this.resolution = resolution; }
 }
