@@ -41,4 +41,13 @@ class SlaServiceTest {
         empty.setPolicy(Priority.P3, null);
         assertThrows(MissingSlaConfigurationException.class, () -> empty.getPolicy(Priority.P3));
     }
+    @Test
+void statusBecomesAtRiskAtExactly70Percent() {
+    LocalDateTime now = created.plusMinutes(21);
+
+    assertEquals(
+        SlaStatus.AT_RISK,
+        sla.checkResolution(created, Priority.P1, now)
+    );
+}
 }
