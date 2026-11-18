@@ -32,12 +32,12 @@ public class IncidentProcessingService {
         Priority priority = priorityStrategy.calculate(
                 incident.getImpact(), incident.getUrgency(), incident.getCriticality());
         incident.setPriority(priority);
-        incident.setStatus(IncidentStatus.CLASSIFIED);
+        incident.transitionTo(IncidentStatus.CLASSIFIED);
 
         Technician technician = assignmentStrategy.pick(incident.getCategory(), technicians);
         technician.incrementActiveIncidents();
         incident.setAssignedTechnician(technician);
-        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.transitionTo(IncidentStatus.ASSIGNED);
 
         return new ProcessingResult(
                 priority,
