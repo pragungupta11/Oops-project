@@ -1,4 +1,5 @@
 package com.iitsm.iitsm.service;
+import org.springframework.stereotype.Service ;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -9,6 +10,8 @@ import com.iitsm.iitsm.exception.MissingSlaConfigurationException;
 import com.iitsm.iitsm.model.Priority;
 import com.iitsm.iitsm.model.SlaPolicy;
 import com.iitsm.iitsm.model.SlaStatus;
+
+@Service
 
 public class SlaService {
     private static final double RISK_THRESHOLD = 0.7;
@@ -46,7 +49,19 @@ public class SlaService {
     /** OK, AT_RISK (70% of time used) or VIOLATED (100% used), against the resolution target. */
     public SlaStatus checkResolution(LocalDateTime created, Priority priority, LocalDateTime now) {
         Duration target = getPolicy(priority).resolutionTarget();
-        double used = (double) Duration.between(created, now).toSeconds() / target.toSeconds();
+        return classify(Duration.between(created, now), target);
+    }
+
+    /** Response clock stops when the technician acknowledges. Until then it keeps running. */
+    public SlaStatus checkResponse(LocalDateTime created, Priority priority,
+                                   LocalDateTime acknowledgedAt, LocalDateTime now) {
+        Duration target = getPolicy(priority).responseTarget();
+        LocalDateTime clockStop = (acknowledgedAt != null) ? acknowledgedAt : now;
+        return classify(Duration.between(created, clockStop), target);
+    }
+
+    private SlaStatus classify(Duration elapsed, Duration target) {
+        double used = (double) elapsed.toSeconds() / target.toSeconds();
         if (used >= 1.0) return SlaStatus.VIOLATED;
         if (used >= RISK_THRESHOLD) return SlaStatus.AT_RISK;
         return SlaStatus.OK;
