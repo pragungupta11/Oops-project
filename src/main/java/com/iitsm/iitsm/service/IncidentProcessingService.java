@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 
 public class IncidentProcessingService {
     private final PriorityStrategy priorityStrategy;
-    private AssignmentStrategy assignmentStrategy;
+    private volatile AssignmentStrategy assignmentStrategy;
     private final SlaService slaService;
 
     public IncidentProcessingService(PriorityStrategy priorityStrategy,
