@@ -2,6 +2,10 @@ package com.iitsm.iitsm.strategy.priority;
 
 import com.iitsm.iitsm.model.Priority;
 
+import org.springframework.stereotype.Component;
+
+@Component("weighted")
+
 public class WeightedPriorityStrategy implements PriorityStrategy {
     @Override
     public Priority calculate(int impact, int urgency, int criticality) {

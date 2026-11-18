@@ -10,6 +10,10 @@ import com.iitsm.iitsm.model.Technician;
 import com.iitsm.iitsm.strategy.assignment.AssignmentStrategy;
 import com.iitsm.iitsm.strategy.priority.PriorityStrategy;
 
+import org.springframework.stereotype.Service;
+
+@Service
+
 public class IncidentProcessingService {
     private final PriorityStrategy priorityStrategy;
     private AssignmentStrategy assignmentStrategy;
@@ -26,6 +30,10 @@ public class IncidentProcessingService {
     /** Lets an admin switch the assignment algorithm at runtime. */
     public void setAssignmentStrategy(AssignmentStrategy assignmentStrategy) {
         this.assignmentStrategy = assignmentStrategy;
+    }
+
+    public AssignmentStrategy getAssignmentStrategy() {
+        return assignmentStrategy;
     }
 
     public ProcessingResult process(Incident incident, List<Technician> technicians) {

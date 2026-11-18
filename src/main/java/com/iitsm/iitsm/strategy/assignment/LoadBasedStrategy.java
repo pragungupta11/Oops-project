@@ -6,6 +6,10 @@ import java.util.List;
 import com.iitsm.iitsm.exception.TechnicianUnavailableException;
 import com.iitsm.iitsm.model.Technician;
 
+import org.springframework.stereotype.Component;
+
+@Component("loadBased")
+
 public class LoadBasedStrategy implements AssignmentStrategy {
     @Override
     public Technician pick(String category, List<Technician> technicians) {
