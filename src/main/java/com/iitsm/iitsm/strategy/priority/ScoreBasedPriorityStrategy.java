@@ -2,6 +2,12 @@ package com.iitsm.iitsm.strategy.priority;
 
 import com.iitsm.iitsm.model.Priority;
 
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Component;
+
+@Component("scoreBased")
+@Primary
+
 public class ScoreBasedPriorityStrategy implements PriorityStrategy {
     @Override
     public Priority calculate(int impact, int urgency, int criticality) {
