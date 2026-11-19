@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Incident')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container" style="max-width: 800px;">
+    <div class="alert alert-success" th:if="${justCreated}">
+        Your incident was reported. It was classified and assigned to a technician automatically.
+    </div>
+    <div class="alert alert-warning" th:if="${duplicates != null and !#lists.isEmpty(duplicates)}">
+        <strong>Similar open incidents already exist:</strong>
+        <ul class="mb-0">
+            <li th:each="d : ${duplicates}"
+                th:text="${d.id()} + ' (' + ${d.score()} + ' match): ' + ${d.description()}"></li>
+        </ul>
+    </div>
+
+    <h2 class="mb-3">
+        <span th:text="${incident.id()}">INC1001</span>
+        <span class="badge fs-6" th:classappend="${incident.priorityClass()}" th:text="${incident.priority()}">P2</span>
+        <span class="badge fs-6" th:classappend="${incident.statusClass()}" th:text="${incident.status()}">ASSIGNED</span>
+    </h2>
+
+    <dl class="row">
+        <dt class="col-sm-3">Description</dt><dd class="col-sm-9" th:text="${incident.description()}"></dd>
+        <dt class="col-sm-3">Category</dt><dd class="col-sm-9" th:text="${incident.category()}"></dd>
+        <dt class="col-sm-3">Affected service</dt><dd class="col-sm-9" th:text="${incident.serviceName()}"></dd>
+        <dt class="col-sm-3">Technician</dt><dd class="col-sm-9" th:text="${incident.technicianName()}"></dd>
+        <dt class="col-sm-3">Reported</dt><dd class="col-sm-9" th:text="${incident.created()}"></dd>
+        <dt class="col-sm-3">Response due</dt><dd class="col-sm-9" th:text="${incident.responseDue()}"></dd>
+        <dt class="col-sm-3">Resolution due</dt><dd class="col-sm-9" th:text="${incident.resolutionDue()}"></dd>
+        <dt class="col-sm-3">SLA status</dt>
+        <dd class="col-sm-9"><span class="badge" th:classappend="${incident.slaClass()}" th:text="${incident.sla()}">OK</span></dd>
+        <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
+    </dl>
+
+    <a class="btn btn-outline-secondary" th:href="@{/employee/incidents}">Back to my incidents</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Report incident')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container" style="max-width: 720px;">
+    <h2 class="mb-3">Report an incident</h2>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+    <form th:action="@{/employee/report}" method="post">
+        <div class="mb-3">
+            <label for="description" class="form-label">What went wrong?</label>
+            <textarea id="description" name="description" class="form-control" rows="4"
+                      maxlength="2000" required th:text="${description}"></textarea>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="category" class="form-label">Category</label>
+                <select id="category" name="category" class="form-select">
+                    <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.label()}"
+                            th:selected="${c.name() == category}"></option>
+                </select>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="serviceName" class="form-label">Affected service</label>
+                <select id="serviceName" name="serviceName" class="form-select">
+                    <option th:each="s : ${services}" th:value="${s.getName()}" th:text="${s.getName()}"
+                            th:selected="${s.getName() == serviceName}"></option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="impact" class="form-label">Impact (how many people)</label>
+                <select id="impact" name="impact" class="form-select">
+                    <option value="1" th:selected="${impact == 1}">1 - Low (one person)</option>
+                    <option value="2" th:selected="${impact == 2}">2 - Medium (a team)</option>
+                    <option value="3" th:selected="${impact == 3}">3 - High (many users / the business)</option>
+                </select>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="urgency" class="form-label">Urgency (how soon)</label>
+                <select id="urgency" name="urgency" class="form-select">
+                    <option value="1" th:selected="${urgency == 1}">1 - Low (can wait)</option>
+                    <option value="2" th:selected="${urgency == 2}">2 - Medium (today)</option>
+                    <option value="3" th:selected="${urgency == 3}">3 - High (blocking work now)</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Submit incident</button>
+        <a class="btn btn-link" th:href="@{/employee/incidents}">Cancel</a>
+    </form>
+</div>
+</body>
+</html>
