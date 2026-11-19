@@ -24,6 +24,8 @@ public class Incident {
     private User reporter;
     private ItService affectedService;
     private String resolution;
+    private String reporterUsername;
+    private String serviceName;
 
     public Incident(String id, String description, String category,
                     int impact, int urgency, int criticality,
@@ -77,6 +79,12 @@ public class Incident {
 
     public ItService getAffectedService() { return affectedService; }
     public void setAffectedService(ItService s) { this.affectedService = s; }
+
+    public String getReporterUsername() { return reporterUsername; }
+    public void setReporterUsername(String reporterUsername) { this.reporterUsername = reporterUsername; }
+
+    public String getServiceName() { return serviceName; }
+    public void setServiceName(String serviceName) { this.serviceName = serviceName; }
 
     public String getResolution() { return resolution; }
     public void setResolution(String resolution) { this.resolution = resolution; }

@@ -24,10 +24,13 @@ public class SecurityConfiguration {
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/h2-console/**").permitAll()
+                        .requestMatchers("/employee/**").hasRole("EMPLOYEE")
+                        .requestMatchers("/technician/**").hasRole("TECHNICIAN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated())
-                .httpBasic(Customizer.withDefaults())
+                .formLogin(form -> form.defaultSuccessUrl("/", true))
+                .logout(Customizer.withDefaults())
                 .build();
     }
 }

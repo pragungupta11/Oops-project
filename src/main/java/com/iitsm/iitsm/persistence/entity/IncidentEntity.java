@@ -48,6 +48,15 @@ public class IncidentEntity {
     private LocalDateTime acknowledgedAt;
     private LocalDateTime resolvedAt;
 
+    @Column(length = 80)
+    private String reporterUsername;
+
+    @Column(length = 120)
+    private String serviceName;
+
+    @Column(length = 2000)
+    private String resolution;
+
     protected IncidentEntity() { }
 
     public IncidentEntity(String id, String description, String category,
@@ -70,10 +79,14 @@ public class IncidentEntity {
     }
 
     public static IncidentEntity fromDomain(Incident incident, TechnicianEntity technician) {
-        return new IncidentEntity(incident.getId(), incident.getDescription(), incident.getCategory(),
+        IncidentEntity entity = new IncidentEntity(incident.getId(), incident.getDescription(), incident.getCategory(),
                 incident.getImpact(), incident.getUrgency(), incident.getCriticality(),
                 incident.getCreatedAt(), incident.getPriority(), incident.getStatus(), technician,
                 incident.getAcknowledgedAt(), incident.getResolvedAt());
+        entity.reporterUsername = incident.getReporterUsername();
+        entity.serviceName = incident.getServiceName();
+        entity.resolution = incident.getResolution();
+        return entity;
     }
 
     public Incident toDomain() {
@@ -83,6 +96,9 @@ public class IncidentEntity {
         incident.setAssignedTechnician(assignedTechnician == null ? null : assignedTechnician.toDomain());
         incident.setAcknowledgedAt(acknowledgedAt);
         incident.setResolvedAt(resolvedAt);
+        incident.setReporterUsername(reporterUsername);
+        incident.setServiceName(serviceName);
+        incident.setResolution(resolution);
         return incident;
     }
 
