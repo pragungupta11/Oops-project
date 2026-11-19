@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Assigned to me')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container">
+    <h2 class="mb-3">Incidents assigned to me</h2>
+
+    <div class="alert alert-secondary" th:if="${#lists.isEmpty(rows)}">
+        Nothing is assigned to you right now.
+    </div>
+
+    <table class="table table-hover align-middle" th:unless="${#lists.isEmpty(rows)}">
+        <thead>
+        <tr>
+            <th>ID</th><th>Category</th><th>Service</th><th>Priority</th>
+            <th>Status</th><th>SLA</th><th>Resolve by</th><th>Reported</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="i : ${rows}">
+            <td><a th:href="@{/technician/incidents/{id}(id=${i.id()})}" th:text="${i.id()}">INC1001</a></td>
+            <td th:text="${i.category()}">Network</td>
+            <td th:text="${i.serviceName()}">VPN</td>
+            <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.priority()}">P2</span></td>
+            <td><span class="badge" th:classappend="${i.statusClass()}" th:text="${i.status()}">ASSIGNED</span></td>
+            <td><span class="badge" th:classappend="${i.slaClass()}" th:text="${i.sla()}">OK</span></td>
+            <td th:text="${i.resolutionDue()}">19 Nov 2026, 14:00</td>
+            <td th:text="${i.created()}">19 Nov 2026, 10:00</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

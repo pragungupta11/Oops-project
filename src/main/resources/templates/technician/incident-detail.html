@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Incident')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container" style="max-width: 800px;">
+    <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+    <h2 class="mb-3">
+        <span th:text="${incident.id()}">INC1001</span>
+        <span class="badge fs-6" th:classappend="${incident.priorityClass()}" th:text="${incident.priority()}">P2</span>
+        <span class="badge fs-6" th:classappend="${incident.statusClass()}" th:text="${incident.status()}">ASSIGNED</span>
+    </h2>
+
+    <dl class="row">
+        <dt class="col-sm-3">Description</dt><dd class="col-sm-9" th:text="${incident.description()}"></dd>
+        <dt class="col-sm-3">Category</dt><dd class="col-sm-9" th:text="${incident.category()}"></dd>
+        <dt class="col-sm-3">Affected service</dt><dd class="col-sm-9" th:text="${incident.serviceName()}"></dd>
+        <dt class="col-sm-3">Reported by</dt><dd class="col-sm-9" th:text="${incident.reporter()}"></dd>
+        <dt class="col-sm-3">Reported</dt><dd class="col-sm-9" th:text="${incident.created()}"></dd>
+        <dt class="col-sm-3">Respond by</dt><dd class="col-sm-9" th:text="${incident.responseDue()}"></dd>
+        <dt class="col-sm-3">Resolve by</dt><dd class="col-sm-9" th:text="${incident.resolutionDue()}"></dd>
+        <dt class="col-sm-3">SLA status</dt>
+        <dd class="col-sm-9"><span class="badge" th:classappend="${incident.slaClass()}" th:text="${incident.sla()}">OK</span></dd>
+        <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
+    </dl>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Next step</h5>
+
+            <form th:if="${incident.status() == 'ASSIGNED'}"
+                  th:action="@{/technician/incidents/{id}/acknowledge(id=${incident.id()})}" method="post">
+                <button type="submit" class="btn btn-primary">Acknowledge</button>
+            </form>
+
+            <form th:if="${incident.status() == 'ACKNOWLEDGED'}"
+                  th:action="@{/technician/incidents/{id}/start(id=${incident.id()})}" method="post">
+                <button type="submit" class="btn btn-primary">Start work</button>
+            </form>
+
+            <form th:if="${incident.status() == 'IN_PROGRESS'}"
+                  th:action="@{/technician/incidents/{id}/resolve(id=${incident.id()})}" method="post">
+                <label for="resolution" class="form-label">How was it resolved?</label>
+                <textarea id="resolution" name="resolution" class="form-control mb-2" rows="3"
+                          maxlength="2000" required></textarea>
+                <button type="submit" class="btn btn-success">Mark resolved</button>
+            </form>
+
+            <p class="mb-0 text-muted"
+               th:unless="${incident.status() == 'ASSIGNED' or incident.status() == 'ACKNOWLEDGED' or incident.status() == 'IN_PROGRESS'}">
+                No action needed from you at this stage.
+            </p>
+        </div>
+    </div>
+
+    <a class="btn btn-outline-secondary" th:href="@{/technician/incidents}">Back to my list</a>
+</div>
+</body>
+</html>

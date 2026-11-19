@@ -1,9 +1,11 @@
 package com.iitsm.iitsm.web;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +15,7 @@ import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.DuplicateMatch;
 import com.iitsm.iitsm.model.Employee;
 import com.iitsm.iitsm.model.Incident;
+import com.iitsm.iitsm.model.IncidentStatus;
 import com.iitsm.iitsm.model.ItService;
 import com.iitsm.iitsm.model.ProcessingResult;
 import com.iitsm.iitsm.model.Technician;
@@ -80,5 +83,52 @@ public class IncidentWorkflowService {
         technicians.save(result.technician());      // technician first (the incident links to him)
         Incident saved = incidents.save(incident);
         return new ReportOutcome(saved, result, matches);
+    }
+
+    /** Technician confirms he has seen the incident: ASSIGNED -> ACKNOWLEDGED. */
+    @Transactional
+    public Incident acknowledge(String incidentId, String technicianId) {
+        Incident incident = loadAssignedTo(incidentId, technicianId);
+        incident.transitionTo(IncidentStatus.ACKNOWLEDGED);
+        incident.setAcknowledgedAt(LocalDateTime.now());
+        return incidents.save(incident);
+    }
+
+    /** Technician starts working: ACKNOWLEDGED -> IN_PROGRESS. */
+    @Transactional
+    public Incident start(String incidentId, String technicianId) {
+        Incident incident = loadAssignedTo(incidentId, technicianId);
+        incident.transitionTo(IncidentStatus.IN_PROGRESS);
+        return incidents.save(incident);
+    }
+
+    /** Technician finishes: IN_PROGRESS -> RESOLVED, stores the notes and frees one workload slot. */
+    @Transactional
+    public Incident resolve(String incidentId, String technicianId, String resolution) {
+        if (resolution == null || resolution.isBlank()) {
+            throw new InvalidIncidentDataException("Please describe how the incident was resolved");
+        }
+        if (resolution.length() > MAX_DESCRIPTION) {
+            throw new InvalidIncidentDataException("Resolution notes must be at most " + MAX_DESCRIPTION + " characters");
+        }
+        Incident incident = loadAssignedTo(incidentId, technicianId);
+        incident.transitionTo(IncidentStatus.RESOLVED);
+        incident.setResolvedAt(LocalDateTime.now());
+        incident.setResolution(resolution.trim());
+
+        Technician technician = technicians.findById(technicianId);
+        technician.decrementActiveIncidents();
+        technicians.save(technician);
+        return incidents.save(incident);
+    }
+
+    /** Loads an incident and makes sure it belongs to this technician. */
+    private Incident loadAssignedTo(String incidentId, String technicianId) {
+        Incident incident = incidents.findById(incidentId);
+        Technician assigned = incident.getAssignedTechnician();
+        if (assigned == null || !assigned.getId().equals(technicianId)) {
+            throw new AccessDeniedException("This incident is not assigned to you");
+        }
+        return incident;
     }
 }
