@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('All incidents')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container-fluid px-4">
+    <h2 class="mb-3">All incidents</h2>
+    <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+    <form class="row g-2 mb-4" method="get" th:action="@{/admin/incidents}">
+        <div class="col-md-2">
+            <label class="form-label small mb-0" for="status">Status</label>
+            <select class="form-select form-select-sm" id="status" name="status">
+                <option value="">All</option>
+                <option th:each="s : ${statuses}" th:value="${s.name()}" th:text="${s.name()}"
+                        th:selected="${s.name() == selStatus}"></option>
+            </select>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label small mb-0" for="priority">Priority</label>
+            <select class="form-select form-select-sm" id="priority" name="priority">
+                <option value="">All</option>
+                <option th:each="p : ${priorities}" th:value="${p.name()}" th:text="${p.name()}"
+                        th:selected="${p.name() == selPriority}"></option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small mb-0" for="category">Category</label>
+            <select class="form-select form-select-sm" id="category" name="category">
+                <option value="">All</option>
+                <option th:each="c : ${categories}" th:value="${c.label()}" th:text="${c.label()}"
+                        th:selected="${c.label() == selCategory}"></option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small mb-0" for="technicianId">Technician</label>
+            <select class="form-select form-select-sm" id="technicianId" name="technicianId">
+                <option value="">All</option>
+                <option th:each="t : ${technicians}" th:value="${t.getId()}" th:text="${t.getName()}"
+                        th:selected="${t.getId() == selTech}"></option>
+            </select>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label small mb-0" for="slaStatus">SLA</label>
+            <select class="form-select form-select-sm" id="slaStatus" name="slaStatus">
+                <option value="">All</option>
+                <option th:each="o : ${slaOptions}" th:value="${o}" th:text="${o}"
+                        th:selected="${o == selSla}"></option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small mb-0" for="keyword">Search text or ID</label>
+            <input class="form-control form-control-sm" id="keyword" name="keyword" th:value="${keyword}">
+        </div>
+        <div class="col-md-2 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            <a class="btn btn-outline-secondary btn-sm" th:href="@{/admin/incidents}">Reset</a>
+        </div>
+    </form>
+
+    <p class="text-muted" th:text="${#lists.size(rows)} + ' incident(s) shown'">0 incident(s) shown</p>
+
+    <table class="table table-hover table-sm align-middle">
+        <thead>
+        <tr>
+            <th>ID</th><th>Description</th><th>Category</th><th>Service</th><th>Priority</th>
+            <th>Status</th><th>SLA</th><th>Technician</th><th>Reporter</th><th>Reported</th><th>Action</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="i : ${rows}">
+            <td th:text="${i.id()}">INC1001</td>
+            <td class="text-truncate" style="max-width: 220px;" th:text="${i.description()}"
+                th:title="${i.description()}">Description</td>
+            <td th:text="${i.category()}">Network</td>
+            <td th:text="${i.serviceName()}">VPN</td>
+            <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.priority()}">P2</span></td>
+            <td><span class="badge" th:classappend="${i.statusClass()}" th:text="${i.status()}">ASSIGNED</span></td>
+            <td><span class="badge" th:classappend="${i.slaClass()}" th:text="${i.sla()}">OK</span></td>
+            <td th:text="${i.technicianName()}">Ravi Kumar</td>
+            <td th:text="${i.reporter()}">employee1</td>
+            <td th:text="${i.created()}">19 Nov 2026, 10:00</td>
+            <td>
+                <form th:if="${i.status() == 'RESOLVED'}" method="post"
+                      th:action="@{/admin/incidents/{id}/verify(id=${i.id()})}">
+                    <button type="submit" class="btn btn-success btn-sm">Verify</button>
+                </form>
+                <form th:if="${i.status() == 'VERIFIED'}" method="post"
+                      th:action="@{/admin/incidents/{id}/close(id=${i.id()})}">
+                    <button type="submit" class="btn btn-dark btn-sm">Close</button>
+                </form>
+            </td>
+        </tr>
+        <tr th:if="${#lists.isEmpty(rows)}">
+            <td colspan="11" class="text-center text-muted">No incidents match these filters.</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

@@ -131,4 +131,20 @@ public class IncidentWorkflowService {
         }
         return incident;
     }
+
+    /** Admin checks the fix: RESOLVED -> VERIFIED. */
+    @Transactional
+    public Incident verify(String incidentId) {
+        Incident incident = incidents.findById(incidentId);
+        incident.transitionTo(IncidentStatus.VERIFIED);
+        return incidents.save(incident);
+    }
+
+    /** Admin closes the incident: VERIFIED -> CLOSED. */
+    @Transactional
+    public Incident close(String incidentId) {
+        Incident incident = incidents.findById(incidentId);
+        incident.transitionTo(IncidentStatus.CLOSED);
+        return incidents.save(incident);
+    }
 }

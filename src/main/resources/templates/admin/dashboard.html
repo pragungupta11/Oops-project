@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Dashboard')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container">
+    <h2 class="mb-3">Dashboard</h2>
+    <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+    <div class="row g-3 mb-4">
+        <div class="col">
+            <div class="card text-center"><div class="card-body">
+                <div class="fs-2" th:text="${total}">0</div><div class="text-muted small">Total incidents</div>
+            </div></div>
+        </div>
+        <div class="col">
+            <div class="card text-center"><div class="card-body">
+                <div class="fs-2" th:text="${open}">0</div><div class="text-muted small">Open</div>
+            </div></div>
+        </div>
+        <div class="col">
+            <div class="card text-center border-warning"><div class="card-body">
+                <div class="fs-2" th:text="${atRisk}">0</div><div class="text-muted small">SLA at risk</div>
+            </div></div>
+        </div>
+        <div class="col">
+            <div class="card text-center border-danger"><div class="card-body">
+                <div class="fs-2" th:text="${violated}">0</div><div class="text-muted small">SLA violated</div>
+            </div></div>
+        </div>
+        <div class="col">
+            <div class="card text-center border-success"><div class="card-body">
+                <div class="fs-2" th:text="${awaitingVerify}">0</div><div class="text-muted small">Awaiting verification</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <h5>By status</h5>
+            <div class="mb-2" th:each="b : ${byStatus}">
+                <div class="d-flex justify-content-between small">
+                    <span th:text="${b.label()}">ASSIGNED</span><span th:text="${b.count()}">0</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar" th:style="'width: ' + ${b.percent()} + '%'"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <h5>By priority</h5>
+            <div class="mb-2" th:each="b : ${byPriority}">
+                <div class="d-flex justify-content-between small">
+                    <span th:text="${b.label()}">P1</span><span th:text="${b.count()}">0</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar bg-danger" th:style="'width: ' + ${b.percent()} + '%'"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h5>Technician workload</h5>
+    <table class="table table-sm align-middle mb-4">
+        <thead><tr><th>Technician</th><th>Skills</th><th>Active incidents</th><th>Available</th></tr></thead>
+        <tbody>
+        <tr th:each="t : ${techs}">
+            <td th:text="${t.name()}">Ravi Kumar</td>
+            <td th:text="${t.skills()}">Network</td>
+            <td th:text="${t.active()}">0</td>
+            <td th:text="${t.available()}">Yes</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <h5>Assignment strategy</h5>
+    <p class="text-muted">Currently: <strong th:text="${activeStrategy}">default</strong></p>
+    <form class="row g-2 mb-5" method="post" th:action="@{/admin/strategy}">
+        <div class="col-auto">
+            <select class="form-select" name="name">
+                <option th:each="n : ${strategyNames}" th:value="${n}" th:text="${n}"></option>
+            </select>
+        </div>
+        <div class="col-auto"><button type="submit" class="btn btn-primary">Switch</button></div>
+    </form>
+</div>
+</body>
+</html>
