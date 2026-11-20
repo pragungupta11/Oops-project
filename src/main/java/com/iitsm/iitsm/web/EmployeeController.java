@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -21,6 +23,7 @@ import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.service.SlaService;
+import com.iitsm.iitsm.strategy.category.CategorySuggester;
 
 @Controller
 @RequestMapping("/employee")
@@ -29,13 +32,32 @@ public class EmployeeController {
     private final IncidentPersistenceService incidents;
     private final ServiceCatalog catalog;
     private final SlaService slaService;
+    private final CategorySuggester categorySuggester;
 
     public EmployeeController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
-                              ServiceCatalog catalog, SlaService slaService) {
+                              ServiceCatalog catalog, SlaService slaService,
+                              CategorySuggester categorySuggester) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.catalog = catalog;
         this.slaService = slaService;
+        this.categorySuggester = categorySuggester;
+    }
+
+    /** What the report form shows under the category box. */
+    public record SuggestionResponse(String category, String label, String source, String reason) {}
+
+    /**
+     * Called by the report form while the employee types. 200 with a suggestion, or
+     * 204 (no content) when there is no confident guess.
+     */
+    @GetMapping("/suggest-category")
+    @ResponseBody
+    public ResponseEntity<SuggestionResponse> suggestCategory(@RequestParam("description") String description) {
+        return categorySuggester.suggest(description)
+                .map(s -> ResponseEntity.ok(new SuggestionResponse(s.category().name(), s.category().label(),
+                        s.source(), s.reason())))
+                .orElse(ResponseEntity.noContent().build());
     }
 
     /**

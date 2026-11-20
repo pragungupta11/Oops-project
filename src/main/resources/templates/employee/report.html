@@ -21,6 +21,7 @@
                     <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.label()}"
                             th:selected="${c.name() == category}"></option>
                 </select>
+                <div id="category-hint" class="form-text"></div>
             </div>
             <div class="col-md-6 mb-3">
                 <label for="serviceName" class="form-label">Affected service</label>
@@ -54,5 +55,37 @@
         <a class="btn btn-link" th:href="@{/employee/incidents}">Cancel</a>
     </form>
 </div>
+<script th:inline="javascript">
+    // Suggest a category while the employee types. It only pre-selects the box; the
+    // employee can always change it, and once they do, we stop overriding their choice.
+    (function () {
+        const url = /*[[@{/employee/suggest-category}]]*/ '/employee/suggest-category';
+        const description = document.getElementById('description');
+        const category = document.getElementById('category');
+        const hint = document.getElementById('category-hint');
+        let chosenByUser = false;
+        let timer = null;
+
+        category.addEventListener('change', () => { chosenByUser = true; });
+
+        description.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(async () => {
+                const text = description.value.trim();
+                if (text.length < 8) { hint.textContent = ''; return; }
+                try {
+                    const response = await fetch(url + '?description=' + encodeURIComponent(text));
+                    if (response.status !== 200) { hint.textContent = ''; return; }
+                    const s = await response.json();
+                    if (!chosenByUser) category.value = s.category;
+                    hint.textContent = 'Suggested: ' + s.label + ' (by ' + s.source + '; ' + s.reason + ')'
+                        + (chosenByUser && category.value !== s.category ? ' - you chose differently, that is fine.' : '');
+                } catch (e) {
+                    hint.textContent = '';   // suggestions are optional; never block the form
+                }
+            }, 500);
+        });
+    })();
+</script>
 </body>
 </html>

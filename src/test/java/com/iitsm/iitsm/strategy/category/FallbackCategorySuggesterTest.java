@@ -1,0 +1,57 @@
+package com.iitsm.iitsm.strategy.category;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.Test;
+
+import com.iitsm.iitsm.model.Category;
+import com.iitsm.iitsm.model.CategorySuggestion;
+
+class FallbackCategorySuggesterTest {
+    private final KeywordCategorySuggester keywords = new KeywordCategorySuggester();
+
+    /** Stands in for an AI suggester, so tests never call a real API. */
+    private static RemoteCategorySuggester ai(Category answer) {
+        return d -> Optional.of(new CategorySuggestion(answer, "AI", "model answer"));
+    }
+
+    private static final RemoteCategorySuggester DOWN = d -> { throw new IllegalStateException("API unavailable"); };
+    private static final RemoteCategorySuggester UNSURE = d -> Optional.empty();
+
+    @Test
+    void usesTheAiAnswerWhenAvailable() {
+        FallbackCategorySuggester s = new FallbackCategorySuggester(List.of(ai(Category.CLOUD)), keywords);
+        CategorySuggestion result = s.suggest("Payment app down").orElseThrow();
+        assertEquals(Category.CLOUD, result.category());
+        assertEquals("AI", result.source());
+    }
+
+    @Test
+    void fallsBackToKeywordsWhenTheAiFails() {
+        FallbackCategorySuggester s = new FallbackCategorySuggester(List.of(DOWN), keywords);
+        CategorySuggestion result = s.suggest("Payment app down").orElseThrow();
+        assertEquals(Category.APPLICATION, result.category());
+        assertEquals("keywords", result.source());
+    }
+
+    @Test
+    void fallsBackToKeywordsWhenTheAiHasNoAnswer() {
+        FallbackCategorySuggester s = new FallbackCategorySuggester(List.of(UNSURE), keywords);
+        assertEquals("keywords", s.suggest("Payment app down").orElseThrow().source());
+    }
+
+    @Test
+    void triesTheNextRemoteBeforeGivingUp() {
+        FallbackCategorySuggester s = new FallbackCategorySuggester(List.of(DOWN, ai(Category.SECURITY)), keywords);
+        assertEquals(Category.SECURITY, s.suggest("anything").orElseThrow().category());
+    }
+
+    @Test
+    void withNoRemotesItIsPurelyRuleBased() {
+        FallbackCategorySuggester s = new FallbackCategorySuggester(List.of(), keywords);
+        assertEquals(Category.APPLICATION, s.suggest("Payment app down").orElseThrow().category());
+    }
+}
