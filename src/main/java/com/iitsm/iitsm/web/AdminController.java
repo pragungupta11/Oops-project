@@ -40,9 +40,6 @@ public class AdminController {
     private final IncidentWorkflowService workflow;
     private final AssignmentStrategyRegistry strategies;
 
-    /** Name of the strategy the admin last switched to (the registry does not report it). */
-    private volatile String activeStrategy = "default (set at startup)";
-
     public AdminController(IncidentPersistenceService incidents, TechnicianPersistenceService technicians,
                            SlaService slaService, IncidentWorkflowService workflow,
                            AssignmentStrategyRegistry strategies) {
@@ -207,7 +204,7 @@ public class AdminController {
         model.addAttribute("byPriority", byPriority);
         model.addAttribute("techs", techs);
         model.addAttribute("strategyNames", new TreeSet<>(strategies.availableNames()));
-        model.addAttribute("activeStrategy", activeStrategy);
+        model.addAttribute("activeStrategy", strategies.currentName());
         return "admin/dashboard";
     }
 
@@ -215,7 +212,6 @@ public class AdminController {
     public String switchStrategy(@RequestParam("name") String name, RedirectAttributes redirect) {
         try {
             strategies.switchTo(name);
-            activeStrategy = name;
             redirect.addFlashAttribute("message", "New incidents will now be assigned using: " + name);
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());

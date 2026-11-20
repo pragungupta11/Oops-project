@@ -1,6 +1,8 @@
 package com.iitsm.iitsm.web;
 
 import org.springframework.security.core.Authentication;
+
+import com.iitsm.iitsm.repository.NotificationRepository;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 
@@ -10,6 +12,18 @@ import org.springframework.web.bind.annotation.ModelAttribute;
  */
 @ControllerAdvice
 public class NavModelAdvice {
+
+    private final NotificationRepository notifications;
+
+    public NavModelAdvice(NotificationRepository notifications) {
+        this.notifications = notifications;
+    }
+
+    /** Number shown on the bell icon. */
+    @ModelAttribute("unreadNotifications")
+    public long unreadNotifications(Authentication authentication) {
+        return authentication == null ? 0 : notifications.countByRecipientAndReadFlagFalse(authentication.getName());
+    }
 
     @ModelAttribute("currentUser")
     public String currentUser(Authentication authentication) {

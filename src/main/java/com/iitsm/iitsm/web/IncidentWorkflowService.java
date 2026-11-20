@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,8 @@ import com.iitsm.iitsm.model.ItService;
 import com.iitsm.iitsm.model.ProcessingResult;
 import com.iitsm.iitsm.model.Technician;
 import com.iitsm.iitsm.model.User;
+import com.iitsm.iitsm.notification.IncidentEvent;
+import com.iitsm.iitsm.notification.IncidentEventType;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.service.DuplicateDetectionService;
@@ -38,6 +41,7 @@ public class IncidentWorkflowService {
     private final TechnicianPersistenceService technicians;
     private final ServiceCatalog catalog;
     private final AuditService audit;
+    private final ApplicationEventPublisher events;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
@@ -45,7 +49,8 @@ public class IncidentWorkflowService {
                                    IncidentPersistenceService incidents,
                                    TechnicianPersistenceService technicians,
                                    ServiceCatalog catalog,
-                                   AuditService audit) {
+                                   AuditService audit,
+                                   ApplicationEventPublisher events) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
@@ -53,6 +58,7 @@ public class IncidentWorkflowService {
         this.technicians = technicians;
         this.catalog = catalog;
         this.audit = audit;
+        this.events = events;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -111,6 +117,7 @@ public class IncidentWorkflowService {
 
         technicians.save(result.technician());      // technician first (the incident links to him)
         Incident saved = incidents.save(incident);
+        events.publishEvent(new IncidentEvent(IncidentEventType.REPORTED, saved));
         return new ReportOutcome(saved, result, matches);
     }
 
@@ -154,7 +161,9 @@ public class IncidentWorkflowService {
         Technician technician = technicians.findById(technicianId);
         technician.decrementActiveIncidents();
         technicians.save(technician);
-        return saveAndCascade(incident);
+        Incident saved = saveAndCascade(incident);
+        events.publishEvent(new IncidentEvent(IncidentEventType.RESOLVED, saved));
+        return saved;
     }
 
     /** A linked report follows its parent automatically; work happens on the parent. */
@@ -188,7 +197,9 @@ public class IncidentWorkflowService {
     public Incident close(String incidentId) {
         Incident incident = incidents.findById(incidentId);
         incident.transitionTo(IncidentStatus.CLOSED);
-        return saveAndCascade(incident);
+        Incident saved = saveAndCascade(incident);
+        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
+        return saved;
     }
 
     // ------------------------------------------------------------ re-routing (reassignment)
@@ -241,6 +252,8 @@ public class IncidentWorkflowService {
             technicians.save(next);
         }
         Incident saved = saveAndCascade(incident);
+        events.publishEvent(new IncidentEvent(IncidentEventType.REROUTED, saved,
+                previous == null ? null : previous.getId()));
         audit.record("REASSIGNMENT_APPROVED", "INCIDENT", incidentId,
                 "Category " + oldCategory + " -> " + newCategory + "; technician "
                         + (previous == null ? "-" : previous.getId()) + " -> " + next.getId());
@@ -287,6 +300,7 @@ public class IncidentWorkflowService {
 
         catchUpWithParent(child, parent);
         Incident saved = incidents.save(child);
+        events.publishEvent(new IncidentEvent(IncidentEventType.LINKED, saved));
         audit.record("DUPLICATE_LINKED", "INCIDENT", incidentId,
                 "Linked to " + parent.getId() + " (" + percent + "% match) by " + technicianId
                         + "; now handled by " + parent.getAssignedTechnician().getId());
@@ -330,6 +344,7 @@ public class IncidentWorkflowService {
         child.setAcknowledgedAt(null);   // its new technician must respond to it on its own
 
         Incident saved = incidents.save(child);
+        events.publishEvent(new IncidentEvent(IncidentEventType.UNLINKED, saved));
         audit.record("INCIDENT_UNLINKED", "INCIDENT", incidentId,
                 "Unlinked from " + formerParent + " by " + (technicianId == null ? "admin" : technicianId)
                         + "; assigned to " + next.getId());
@@ -341,9 +356,17 @@ public class IncidentWorkflowService {
         Incident saved = incidents.save(parent);
         for (Incident child : incidents.findAll()) {
             if (parent.getId().equals(child.getParentId())) {
+                IncidentStatus before = child.getStatus();
                 child.setAssignedTechnician(parent.getAssignedTechnician());
                 catchUpWithParent(child, parent);
-                incidents.save(child);
+                Incident savedChild = incidents.save(child);
+                if (before != savedChild.getStatus()) {
+                    if (savedChild.getStatus() == IncidentStatus.RESOLVED) {
+                        events.publishEvent(new IncidentEvent(IncidentEventType.RESOLVED, savedChild));
+                    } else if (savedChild.getStatus() == IncidentStatus.CLOSED) {
+                        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, savedChild));
+                    }
+                }
             }
         }
         return saved;

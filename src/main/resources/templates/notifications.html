@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Notifications')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container">
+    <h2 class="mb-3">Notifications</h2>
+    <p class="text-muted" th:if="${#lists.isEmpty(items)}">Nothing yet.</p>
+    <div class="list-group">
+        <div class="list-group-item" th:each="n : ${items}" th:classappend="${n.isNew()} ? 'list-group-item-warning' : ''">
+            <div class="d-flex justify-content-between">
+                <strong th:text="${n.subject()}">INC1002 resolved</strong>
+                <small class="text-muted">
+                    <span class="badge bg-danger me-1" th:if="${n.isNew()}">new</span>
+                    <span th:text="${n.time()}">20 Nov 2026, 10:00</span>
+                </small>
+            </div>
+            <div th:text="${n.body()}">Your incident has been resolved.</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
