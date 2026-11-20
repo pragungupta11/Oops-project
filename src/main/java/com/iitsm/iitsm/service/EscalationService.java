@@ -52,6 +52,7 @@ public class EscalationService {
 
     private boolean needsWatching(Incident incident) {
         return incident.getPriority() != null
+                && !incident.isLinked()          // escalate the parent, not every duplicate report
                 && ESCALATING.contains(incident.getPriority())
                 && WAITING_FOR_ACK.contains(incident.getStatus())
                 && incident.getAcknowledgedAt() == null;

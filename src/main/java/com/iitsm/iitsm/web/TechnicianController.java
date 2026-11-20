@@ -37,6 +37,9 @@ public class TechnicianController {
         this.slaService = slaService;
     }
 
+    /** The suspected original incident, shown next to the "Link" / "Not the same" buttons. */
+    public record SuggestionView(String id, String match, String description, String technicianName, String status) {}
+
     @GetMapping("/incidents")
     public String list(Authentication authentication, Model model) {
         String me = authentication.getName();
@@ -60,6 +63,23 @@ public class TechnicianController {
         model.addAttribute("categories", Category.values());
         model.addAttribute("pendingCategory", incident.getRequestedCategory());
         model.addAttribute("pendingReason", incident.getReassignmentReason());
+
+        // Duplicate hint (only while not linked): show what the suspected original is about.
+        if (incident.hasDuplicateSuggestion() && !incident.isLinked()) {
+            try {
+                Incident original = incidents.findById(incident.getSuggestedParentId());
+                model.addAttribute("suggestion", new SuggestionView(original.getId(),
+                        incident.getSuggestedMatchPercent() + "%", original.getDescription(),
+                        original.getAssignedTechnician() == null ? "-" : original.getAssignedTechnician().getName(),
+                        original.getStatus().name()));
+            } catch (IllegalArgumentException ignored) {
+                // the suggested incident no longer exists; just show nothing
+            }
+        }
+        model.addAttribute("linkedReports", incidents.findAll().stream()
+                .filter(i -> incident.getId().equals(i.getParentId()))
+                .map(Incident::getId)
+                .toList());
         return "technician/incident-detail";
     }
 
@@ -123,6 +143,53 @@ public class TechnicianController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
         }
         return "redirect:/technician/incidents/" + id;
+    }
+
+    @PostMapping("/incidents/{id}/duplicate/link")
+    public String linkDuplicate(@PathVariable("id") String id, Authentication authentication,
+                                RedirectAttributes redirect) {
+        try {
+            Incident linked = workflow.linkToSuggestedParent(id, authentication.getName());
+            redirect.addFlashAttribute("message", id + " is now linked to " + linked.getParentId()
+                    + ". It will follow that incident and no longer counts towards your workload.");
+        } catch (InvalidStateTransitionException | InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        // after linking, the report may now belong to another technician
+        return "redirect:/technician/incidents";
+    }
+
+    @PostMapping("/incidents/{id}/duplicate/dismiss")
+    public String dismissDuplicate(@PathVariable("id") String id, Authentication authentication,
+                                   RedirectAttributes redirect) {
+        try {
+            workflow.dismissDuplicateSuggestion(id, authentication.getName());
+            redirect.addFlashAttribute("message", "Noted: " + id + " is a separate problem.");
+        } catch (InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/technician/incidents/" + id;
+    }
+
+    @PostMapping("/incidents/{id}/duplicate/unlink")
+    public String unlink(@PathVariable("id") String id, Authentication authentication,
+                         RedirectAttributes redirect) {
+        try {
+            Incident unlinked = workflow.unlink(id, authentication.getName());
+            redirect.addFlashAttribute("message", id + " is a separate incident again and was assigned to "
+                    + unlinked.getAssignedTechnician().getName() + ".");
+        } catch (InvalidStateTransitionException | InvalidIncidentDataException
+                 | com.iitsm.iitsm.exception.TechnicianUnavailableException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+            return "redirect:/technician/incidents/" + id;
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/technician/incidents";
     }
 
     private Incident find(String id) {

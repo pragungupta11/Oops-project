@@ -69,6 +69,16 @@ public class IncidentEntity {
     @Column(length = 500)
     private String reassignmentReason;
 
+    /** Set when a technician linked this report to an existing incident (the parent). */
+    @Column(length = 20)
+    private String parentId;
+
+    /** The system's duplicate hint, waiting for a technician's decision. */
+    @Column(length = 20)
+    private String suggestedParentId;
+
+    private Integer suggestedMatchPercent;
+
     protected IncidentEntity() { }
 
     public IncidentEntity(String id, String description, String category,
@@ -101,6 +111,9 @@ public class IncidentEntity {
         entity.escalationLevel = incident.getEscalationLevel();
         entity.requestedCategory = incident.getRequestedCategory();
         entity.reassignmentReason = incident.getReassignmentReason();
+        entity.parentId = incident.getParentId();
+        entity.suggestedParentId = incident.getSuggestedParentId();
+        entity.suggestedMatchPercent = incident.getSuggestedMatchPercent();
         return entity;
     }
 
@@ -118,6 +131,7 @@ public class IncidentEntity {
             incident.setEscalationLevel(escalationLevel);
         }
         incident.restoreReassignmentRequest(requestedCategory, reassignmentReason);
+        incident.restoreDuplicateState(parentId, suggestedParentId, suggestedMatchPercent);
         return incident;
     }
 

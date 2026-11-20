@@ -148,6 +148,19 @@ public class AdminController {
         return "redirect:/admin/incidents";
     }
 
+    @PostMapping("/incidents/{id}/unlink")
+    public String unlink(@PathVariable("id") String id, RedirectAttributes redirect) {
+        try {
+            Incident unlinked = workflow.unlink(id, null);
+            redirect.addFlashAttribute("message", id + " is a separate incident again, assigned to "
+                    + unlinked.getAssignedTechnician().getName() + ".");
+        } catch (InvalidIncidentDataException | InvalidStateTransitionException
+                 | TechnicianUnavailableException | IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/admin/incidents";
+    }
+
     @PostMapping("/incidents/{id}/reassign/reject")
     public String rejectReassignment(@PathVariable("id") String id, RedirectAttributes redirect) {
         try {

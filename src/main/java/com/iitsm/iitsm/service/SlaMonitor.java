@@ -47,6 +47,7 @@ public class SlaMonitor {
     private boolean isOpen(Incident incident) {
         IncidentStatus s = incident.getStatus();
         return incident.getPriority() != null
+                && !incident.isLinked()          // the parent incident carries the SLA
                 && s != IncidentStatus.RESOLVED
                 && s != IncidentStatus.VERIFIED
                 && s != IncidentStatus.CLOSED;

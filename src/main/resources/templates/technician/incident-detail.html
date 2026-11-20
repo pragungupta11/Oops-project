@@ -26,7 +26,47 @@
         <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
     </dl>
 
-    <div class="card mb-3">
+    <div class="alert alert-info" th:if="${incident.linked()}">
+        <strong>Linked report.</strong> This is the same problem as
+        <a th:href="@{/technician/incidents/{id}(id=${incident.parentId()})}" th:text="${incident.parentId()}">INC1001</a>.
+        It follows that incident automatically (status and resolution) and does not count towards your workload.
+        <form class="mt-2" method="post" th:action="@{/technician/incidents/{id}/duplicate/unlink(id=${incident.id()})}">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Not the same after all: unlink</button>
+        </form>
+    </div>
+
+    <div class="card mb-3 border-warning" th:if="${suggestion != null}">
+        <div class="card-body">
+            <h5 class="card-title">Possible duplicate</h5>
+            <p class="mb-2">
+                This may be the same problem as
+                <strong th:text="${suggestion.id()}">INC1001</strong>
+                (<span th:text="${suggestion.match()}">55%</span> text match),
+                handled by <span th:text="${suggestion.technicianName()}">Arjun</span>,
+                status <span th:text="${suggestion.status()}">IN_PROGRESS</span>:
+            </p>
+            <blockquote class="border-start ps-3 text-muted" th:text="${suggestion.description()}">Payment app down</blockquote>
+            <div class="d-flex gap-2">
+                <form method="post" th:action="@{/technician/incidents/{id}/duplicate/link(id=${incident.id()})}">
+                    <button type="submit" class="btn btn-warning">Same problem: link to it</button>
+                </form>
+                <form method="post" th:action="@{/technician/incidents/{id}/duplicate/dismiss(id=${incident.id()})}">
+                    <button type="submit" class="btn btn-outline-secondary">Not the same</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary" th:unless="${#lists.isEmpty(linkedReports)}">
+        <strong th:text="${#lists.size(linkedReports)} + ' linked report(s)'">2 linked reports</strong>
+        follow this incident:
+        <span th:each="r, st : ${linkedReports}">
+            <a th:href="@{/technician/incidents/{id}(id=${r})}" th:text="${r}">INC1002</a><span th:unless="${st.last}">, </span>
+        </span>.
+        When you resolve this incident, they are resolved with the same notes.
+    </div>
+
+    <div class="card mb-3" th:unless="${incident.linked()}">
         <div class="card-body">
             <h5 class="card-title">Next step</h5>
 
@@ -56,7 +96,7 @@
     </div>
 
     <div class="card mb-3 border-warning"
-         th:if="${incident.status() == 'ASSIGNED' or incident.status() == 'ACKNOWLEDGED' or incident.status() == 'IN_PROGRESS'}">
+         th:if="${!incident.linked() and (incident.status() == 'ASSIGNED' or incident.status() == 'ACKNOWLEDGED' or incident.status() == 'IN_PROGRESS')}">
         <div class="card-body">
             <h5 class="card-title">Wrong category?</h5>
 

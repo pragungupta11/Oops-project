@@ -36,6 +36,13 @@ public class Incident {
     private String requestedCategory;
     private String reassignmentReason;
 
+    // Duplicate handling: the system only SUGGESTS a parent; a technician confirms the link.
+    private static final Set<IncidentStatus> FINISHED = EnumSet.of(
+            IncidentStatus.RESOLVED, IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
+    private String parentId;
+    private String suggestedParentId;
+    private Integer suggestedMatchPercent;
+
     public Incident(String id, String description, String category,
                     int impact, int urgency, int criticality,
                     LocalDateTime createdAt) {
@@ -110,6 +117,9 @@ public class Incident {
         if (!REROUTABLE.contains(getStatus())) {
             throw new InvalidIncidentDataException("Only an active incident can be re-routed (status is " + getStatus() + ")");
         }
+        if (isLinked()) {
+            throw new InvalidIncidentDataException("This report is linked to " + parentId + "; unlink it before re-routing");
+        }
         if (hasPendingReassignment()) {
             throw new InvalidIncidentDataException("A re-routing request is already waiting for the admin");
         }
@@ -163,5 +173,73 @@ public class Incident {
     private void clearReassignmentRequest() {
         this.requestedCategory = null;
         this.reassignmentReason = null;
+    }
+
+    // ------------------------------------------------------------ duplicates (manual linking)
+
+    public String getParentId() { return parentId; }
+    public boolean isLinked() { return parentId != null; }
+    public String getSuggestedParentId() { return suggestedParentId; }
+    public Integer getSuggestedMatchPercent() { return suggestedMatchPercent; }
+    public boolean hasDuplicateSuggestion() { return suggestedParentId != null; }
+    public boolean isFinished() { return FINISHED.contains(getStatus()); }
+
+    /** The system thinks this may be the same problem as another open incident. Only a hint. */
+    public void suggestDuplicateOf(String incidentId, int matchPercent) {
+        this.suggestedParentId = incidentId;
+        this.suggestedMatchPercent = matchPercent;
+    }
+
+    /** Technician checked the hint and decided it is a different problem. */
+    public void dismissDuplicateSuggestion() {
+        this.suggestedParentId = null;
+        this.suggestedMatchPercent = null;
+    }
+
+    /**
+     * Technician confirms this report is the same problem as {@code parent}. The report is then
+     * handled by the parent's technician and follows the parent's progress.
+     */
+    public void linkTo(Incident parent) {
+        if (parent == null) {
+            throw new InvalidIncidentDataException("Choose the incident to link to");
+        }
+        if (parent.getId().equals(id)) {
+            throw new InvalidIncidentDataException("An incident cannot be linked to itself");
+        }
+        if (isLinked()) {
+            throw new InvalidIncidentDataException(id + " is already linked to " + parentId);
+        }
+        if (parent.isLinked()) {
+            throw new InvalidIncidentDataException(parent.getId() + " is itself linked to "
+                    + parent.getParentId() + "; link to that one instead");
+        }
+        if (isFinished() || parent.isFinished()) {
+            throw new InvalidIncidentDataException("Only open incidents can be linked");
+        }
+        if (parent.getAssignedTechnician() == null) {
+            throw new InvalidIncidentDataException(parent.getId() + " has no technician yet");
+        }
+        this.parentId = parent.getId();
+        this.assignedTechnician = parent.getAssignedTechnician();
+        dismissDuplicateSuggestion();
+    }
+
+    /** The link was a mistake: this report becomes an independent incident again. */
+    public void unlink() {
+        if (!isLinked()) {
+            throw new InvalidIncidentDataException(id + " is not linked to another incident");
+        }
+        if (isFinished()) {
+            throw new InvalidIncidentDataException("A finished incident cannot be unlinked");
+        }
+        this.parentId = null;
+    }
+
+    /** Used only when loading from the database. */
+    public void restoreDuplicateState(String parentId, String suggestedParentId, Integer matchPercent) {
+        this.parentId = parentId;
+        this.suggestedParentId = suggestedParentId;
+        this.suggestedMatchPercent = matchPercent;
     }
 }

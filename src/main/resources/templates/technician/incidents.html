@@ -19,7 +19,8 @@
         </thead>
         <tbody>
         <tr th:each="i : ${rows}">
-            <td><a th:href="@{/technician/incidents/{id}(id=${i.id()})}" th:text="${i.id()}">INC1001</a></td>
+            <td><a th:href="@{/technician/incidents/{id}(id=${i.id()})}" th:text="${i.id()}">INC1001</a>
+                <div class="small text-muted" th:if="${i.linked()}" th:text="'linked to ' + ${i.parentId()}">linked to INC1001</div></td>
             <td th:text="${i.category()}">Network</td>
             <td th:text="${i.serviceName()}">VPN</td>
             <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.priority()}">P2</span></td>

@@ -16,8 +16,9 @@
             </li>
         </ul>
     </div>
-    <div class="alert alert-info" th:if="${othersReportedIt}">
-        A similar issue has already been reported by someone else and our team is working on it.
+    <div class="alert alert-info" th:if="${incident.linked()}">
+        Our team confirmed this is part of an issue that is already being worked on.
+        You will see the update here as soon as it is fixed.
     </div>
 
     <h2 class="mb-3">

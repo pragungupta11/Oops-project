@@ -70,11 +70,8 @@ public class EmployeeController {
                     .map(m -> new DuplicateView(true, m.incident().getId(), m.incident().getDescription(),
                             Math.round(m.score() * 100) + "%"))
                     .toList();
-            boolean othersReportedIt = outcome.duplicates().stream()
-                    .anyMatch(m -> !me.equals(m.incident().getReporterUsername()));
             redirect.addFlashAttribute("justCreated", true);
             redirect.addFlashAttribute("duplicates", mine);
-            redirect.addFlashAttribute("othersReportedIt", othersReportedIt);
             // Redirect so that refreshing the page does not file the same incident twice.
             return "redirect:/employee/incidents/" + outcome.incident().getId();
         } catch (InvalidIncidentDataException | TechnicianUnavailableException | IllegalArgumentException e) {

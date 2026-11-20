@@ -110,7 +110,8 @@
         </thead>
         <tbody>
         <tr th:each="i : ${rows}">
-            <td th:text="${i.id()}">INC1001</td>
+            <td><span th:text="${i.id()}">INC1001</span>
+                <div class="small text-muted" th:if="${i.linked()}" th:text="'linked to ' + ${i.parentId()}">linked to INC1001</div></td>
             <td class="text-truncate" style="max-width: 220px;" th:text="${i.description()}"
                 th:title="${i.description()}">Description</td>
             <td th:text="${i.category()}">Network</td>
@@ -129,6 +130,10 @@
                 <form th:if="${i.status() == 'VERIFIED'}" method="post"
                       th:action="@{/admin/incidents/{id}/close(id=${i.id()})}">
                     <button type="submit" class="btn btn-dark btn-sm">Close</button>
+                </form>
+                <form th:if="${i.linked() and i.status() != 'RESOLVED' and i.status() != 'VERIFIED' and i.status() != 'CLOSED'}"
+                      method="post" th:action="@{/admin/incidents/{id}/unlink(id=${i.id()})}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Unlink</button>
                 </form>
             </td>
         </tr>

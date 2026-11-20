@@ -18,7 +18,8 @@ public record IncidentView(String id, String description, String category, Strin
                            String status, String statusClass,
                            String technicianName, String technicianId, String reporter,
                            String created, String responseDue, String resolutionDue,
-                           String sla, String slaClass, String resolution) {
+                           String sla, String slaClass, String resolution,
+                           String parentId) {
 
     private static final DateTimeFormatter FORMAT =
             DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.ENGLISH);
@@ -30,7 +31,7 @@ public record IncidentView(String id, String description, String category, Strin
                 && s != IncidentStatus.CLOSED;
 
         String sla = "-";
-        if (p != null && open) {
+        if (p != null && open && !i.isLinked()) {   // a linked report shares its parent's SLA
             sla = slaService.checkResolution(i.getCreatedAt(), p, LocalDateTime.now()).name();
         }
         String responseDue = p == null ? "-" : FORMAT.format(slaService.responseDeadline(i.getCreatedAt(), p));
@@ -46,7 +47,12 @@ public record IncidentView(String id, String description, String category, Strin
                 orDash(i.getReporterUsername()),
                 FORMAT.format(i.getCreatedAt()), responseDue, resolutionDue,
                 sla, slaClass(sla),
-                orDash(i.getResolution()));
+                orDash(i.getResolution()),
+                i.getParentId() == null ? "" : i.getParentId());
+    }
+
+    public boolean linked() {
+        return !parentId.isEmpty();
     }
 
     /** Plain-language urgency shown to employees instead of the internal P1-P4 code. */
