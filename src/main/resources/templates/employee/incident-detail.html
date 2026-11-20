@@ -8,16 +8,22 @@
         Your incident was reported. It was classified and assigned to a technician automatically.
     </div>
     <div class="alert alert-warning" th:if="${duplicates != null and !#lists.isEmpty(duplicates)}">
-        <strong>Similar open incidents already exist:</strong>
+        <strong>You already reported something similar:</strong>
         <ul class="mb-0">
-            <li th:each="d : ${duplicates}"
-                th:text="${d.id()} + ' (' + ${d.score()} + ' match): ' + ${d.description()}"></li>
+            <li th:each="d : ${duplicates}">
+                <a th:href="@{/employee/incidents/{id}(id=${d.id()})}" th:text="${d.id()}">INC1001</a>
+                <span th:text="' (' + ${d.score()} + ' match): ' + ${d.description()}"></span>
+            </li>
         </ul>
+    </div>
+    <div class="alert alert-info" th:if="${othersReportedIt}">
+        A similar issue has already been reported by someone else and our team is working on it.
     </div>
 
     <h2 class="mb-3">
         <span th:text="${incident.id()}">INC1001</span>
-        <span class="badge fs-6" th:classappend="${incident.priorityClass()}" th:text="${incident.priority()}">P2</span>
+        <span class="badge fs-6" th:classappend="${incident.priorityClass()}"
+              th:text="'Urgency: ' + ${incident.urgencyLabel()}">Urgency: High</span>
         <span class="badge fs-6" th:classappend="${incident.statusClass()}" th:text="${incident.status()}">ASSIGNED</span>
     </h2>
 
@@ -27,10 +33,7 @@
         <dt class="col-sm-3">Affected service</dt><dd class="col-sm-9" th:text="${incident.serviceName()}"></dd>
         <dt class="col-sm-3">Technician</dt><dd class="col-sm-9" th:text="${incident.technicianName()}"></dd>
         <dt class="col-sm-3">Reported</dt><dd class="col-sm-9" th:text="${incident.created()}"></dd>
-        <dt class="col-sm-3">Response due</dt><dd class="col-sm-9" th:text="${incident.responseDue()}"></dd>
-        <dt class="col-sm-3">Resolution due</dt><dd class="col-sm-9" th:text="${incident.resolutionDue()}"></dd>
-        <dt class="col-sm-3">SLA status</dt>
-        <dd class="col-sm-9"><span class="badge" th:classappend="${incident.slaClass()}" th:text="${incident.sla()}">OK</span></dd>
+        <dt class="col-sm-3">Expected resolution by</dt><dd class="col-sm-9" th:text="${incident.resolutionDue()}"></dd>
         <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
     </dl>
 

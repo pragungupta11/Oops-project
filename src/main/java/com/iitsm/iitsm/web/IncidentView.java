@@ -49,6 +49,17 @@ public record IncidentView(String id, String description, String category, Strin
                 orDash(i.getResolution()));
     }
 
+    /** Plain-language urgency shown to employees instead of the internal P1-P4 code. */
+    public String urgencyLabel() {
+        return switch (priority) {
+            case "P1" -> "Critical";
+            case "P2" -> "High";
+            case "P3" -> "Medium";
+            case "P4" -> "Low";
+            default -> "-";
+        };
+    }
+
     private static String orDash(String value) {
         return value == null || value.isBlank() ? "-" : value;
     }

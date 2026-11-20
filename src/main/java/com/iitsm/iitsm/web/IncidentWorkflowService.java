@@ -9,6 +9,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.iitsm.iitsm.audit.AuditService;
 import com.iitsm.iitsm.exception.InvalidIncidentDataException;
 import com.iitsm.iitsm.factory.IncidentFactory;
 import com.iitsm.iitsm.model.Category;
@@ -36,19 +37,22 @@ public class IncidentWorkflowService {
     private final IncidentPersistenceService incidents;
     private final TechnicianPersistenceService technicians;
     private final ServiceCatalog catalog;
+    private final AuditService audit;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
                                    DuplicateDetectionService duplicateDetection,
                                    IncidentPersistenceService incidents,
                                    TechnicianPersistenceService technicians,
-                                   ServiceCatalog catalog) {
+                                   ServiceCatalog catalog,
+                                   AuditService audit) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
         this.incidents = incidents;
         this.technicians = technicians;
         this.catalog = catalog;
+        this.audit = audit;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -90,7 +94,10 @@ public class IncidentWorkflowService {
     public Incident acknowledge(String incidentId, String technicianId) {
         Incident incident = loadAssignedTo(incidentId, technicianId);
         incident.transitionTo(IncidentStatus.ACKNOWLEDGED);
-        incident.setAcknowledgedAt(LocalDateTime.now());
+        // Keep the first acknowledgement: after a re-routing the response SLA was already met.
+        if (incident.getAcknowledgedAt() == null) {
+            incident.setAcknowledgedAt(LocalDateTime.now());
+        }
         return incidents.save(incident);
     }
 
@@ -146,5 +153,73 @@ public class IncidentWorkflowService {
         Incident incident = incidents.findById(incidentId);
         incident.transitionTo(IncidentStatus.CLOSED);
         return incidents.save(incident);
+    }
+
+    // ------------------------------------------------------------ re-routing (reassignment)
+
+    /** Technician says the category is wrong and asks the admin to re-route the incident. */
+    @Transactional
+    public Incident requestReassignment(String incidentId, String technicianId,
+                                        String correctCategory, String reason) {
+        Incident incident = loadAssignedTo(incidentId, technicianId);
+        String oldCategory = incident.getCategory();
+        incident.requestReassignment(correctCategory, reason);
+        Incident saved = incidents.save(incident);
+        audit.record("REASSIGNMENT_REQUESTED", "INCIDENT", incidentId,
+                "Category " + oldCategory + " -> " + correctCategory + " requested by " + technicianId
+                        + ": " + incident.getReassignmentReason());
+        return saved;
+    }
+
+    /**
+     * Admin approves a re-routing. technicianId "auto" lets the active assignment strategy pick
+     * (excluding the current technician); otherwise the admin's chosen technician is used.
+     */
+    @Transactional
+    public Incident approveReassignment(String incidentId, String technicianId) {
+        Incident incident = incidents.findById(incidentId);
+        if (!incident.hasPendingReassignment()) {
+            throw new InvalidIncidentDataException("There is no re-routing request for " + incidentId);
+        }
+        String newCategory = incident.getRequestedCategory();
+        Technician previous = incident.getAssignedTechnician();
+
+        Technician next;
+        if (technicianId == null || technicianId.isBlank() || technicianId.equals("auto")) {
+            List<Technician> pool = technicians.findAll().stream()
+                    .filter(t -> previous == null || !t.getId().equals(previous.getId()))
+                    .toList();
+            next = processing.getAssignmentStrategy().pick(newCategory, pool);
+        } else {
+            next = technicians.findById(technicianId);
+        }
+
+        String oldCategory = incident.getCategory();
+        incident.approveReassignment(next);
+
+        if (previous != null && !previous.getId().equals(next.getId())) {
+            Technician old = technicians.findById(previous.getId());
+            old.decrementActiveIncidents();
+            technicians.save(old);
+            next.incrementActiveIncidents();
+            technicians.save(next);
+        }
+        Incident saved = incidents.save(incident);
+        audit.record("REASSIGNMENT_APPROVED", "INCIDENT", incidentId,
+                "Category " + oldCategory + " -> " + newCategory + "; technician "
+                        + (previous == null ? "-" : previous.getId()) + " -> " + next.getId());
+        return saved;
+    }
+
+    /** Admin rejects a re-routing: the incident stays as it was. */
+    @Transactional
+    public Incident rejectReassignment(String incidentId) {
+        Incident incident = incidents.findById(incidentId);
+        String requested = incident.getRequestedCategory();
+        incident.rejectReassignment();
+        Incident saved = incidents.save(incident);
+        audit.record("REASSIGNMENT_REJECTED", "INCIDENT", incidentId,
+                "Request to move to " + requested + " was rejected");
+        return saved;
     }
 }

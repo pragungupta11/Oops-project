@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import com.iitsm.iitsm.exception.InvalidIncidentDataException;
 import com.iitsm.iitsm.exception.InvalidStateTransitionException;
+import com.iitsm.iitsm.exception.TechnicianUnavailableException;
 import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.model.IncidentStatus;
@@ -54,6 +56,11 @@ public class AdminController {
     /** One bar on the dashboard. */
     public record Bar(String label, int count, int percent) {}
 
+    /** One pending re-routing request shown to the admin. */
+    public record ReroutingView(String id, String description, String currentCategory,
+                                String requestedCategory, String reason, String technicianName,
+                                List<Technician> skilledTechnicians) {}
+
     /** One row of the technician workload table. */
     public record TechView(String id, String name, String skills, int active, String available) {}
 
@@ -91,6 +98,16 @@ public class AdminController {
         model.addAttribute("selTech", technicianId);
         model.addAttribute("selSla", slaStatus);
         model.addAttribute("keyword", keyword);
+
+        List<Technician> allTechs = technicians.findAll();
+        List<ReroutingView> rerouting = incidents.findAll().stream()
+                .filter(Incident::hasPendingReassignment)
+                .map(i -> new ReroutingView(i.getId(), i.getDescription(), i.getCategory(),
+                        i.getRequestedCategory(), i.getReassignmentReason(),
+                        i.getAssignedTechnician() == null ? "-" : i.getAssignedTechnician().getName(),
+                        allTechs.stream().filter(t -> t.getSkills().contains(i.getRequestedCategory())).toList()))
+                .toList();
+        model.addAttribute("rerouting", rerouting);
         return "admin/incidents";
     }
 
@@ -111,6 +128,32 @@ public class AdminController {
             workflow.close(id);
             redirect.addFlashAttribute("message", id + " closed.");
         } catch (InvalidStateTransitionException | IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/admin/incidents";
+    }
+
+    @PostMapping("/incidents/{id}/reassign/approve")
+    public String approveReassignment(@PathVariable("id") String id,
+                                      @RequestParam(name = "technicianId", defaultValue = "auto") String technicianId,
+                                      RedirectAttributes redirect) {
+        try {
+            Incident updated = workflow.approveReassignment(id, technicianId);
+            redirect.addFlashAttribute("message", id + " re-routed to " + updated.getCategory()
+                    + " and assigned to " + updated.getAssignedTechnician().getName() + ".");
+        } catch (InvalidIncidentDataException | InvalidStateTransitionException
+                 | TechnicianUnavailableException | IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/admin/incidents";
+    }
+
+    @PostMapping("/incidents/{id}/reassign/reject")
+    public String rejectReassignment(@PathVariable("id") String id, RedirectAttributes redirect) {
+        try {
+            workflow.rejectReassignment(id);
+            redirect.addFlashAttribute("message", "Re-routing of " + id + " rejected; it stays with the current technician.");
+        } catch (InvalidIncidentDataException | IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/admin/incidents";

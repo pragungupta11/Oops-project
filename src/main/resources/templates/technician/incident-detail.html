@@ -55,6 +55,33 @@
         </div>
     </div>
 
+    <div class="card mb-3 border-warning"
+         th:if="${incident.status() == 'ASSIGNED' or incident.status() == 'ACKNOWLEDGED' or incident.status() == 'IN_PROGRESS'}">
+        <div class="card-body">
+            <h5 class="card-title">Wrong category?</h5>
+
+            <div th:if="${pendingCategory != null}" class="alert alert-info mb-0">
+                Re-routing to <strong th:text="${pendingCategory}">Application</strong> is waiting for the admin.
+                Reason: <span th:text="${pendingReason}">reason</span>
+            </div>
+
+            <form th:if="${pendingCategory == null}" method="post"
+                  th:action="@{/technician/incidents/{id}/reassign(id=${incident.id()})}">
+                <p class="text-muted small">If the employee chose the wrong category, ask the admin to
+                    re-route it to a technician with the right skills. You keep it until the admin decides.</p>
+                <label for="category" class="form-label">Correct category</label>
+                <select id="category" name="category" class="form-select mb-2" required>
+                    <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.label()}"
+                            th:disabled="${c.label() == incident.category()}"></option>
+                </select>
+                <label for="reason" class="form-label">Why is the current category wrong?</label>
+                <textarea id="reason" name="reason" class="form-control mb-2" rows="2"
+                          maxlength="500" required></textarea>
+                <button type="submit" class="btn btn-warning">Request re-routing</button>
+            </form>
+        </div>
+    </div>
+
     <a class="btn btn-outline-secondary" th:href="@{/technician/incidents}">Back to my list</a>
 </div>
 </body>

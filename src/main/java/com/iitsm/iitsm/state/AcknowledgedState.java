@@ -6,5 +6,5 @@ import com.iitsm.iitsm.model.IncidentStatus;
 
 public class AcknowledgedState extends AbstractIncidentState {
     @Override public IncidentStatus status() { return IncidentStatus.ACKNOWLEDGED; }
-    @Override public Set<IncidentStatus> allowedNext() { return Set.of(IncidentStatus.IN_PROGRESS); }
+    @Override public Set<IncidentStatus> allowedNext() { return Set.of(IncidentStatus.IN_PROGRESS, IncidentStatus.ASSIGNED); }
 }

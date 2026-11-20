@@ -1,5 +1,6 @@
 package com.iitsm.iitsm.persistence.entity;
 
+import com.iitsm.iitsm.model.EscalationLevel;
 import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.model.IncidentStatus;
 import com.iitsm.iitsm.model.Priority;
@@ -57,6 +58,17 @@ public class IncidentEntity {
     @Column(length = 2000)
     private String resolution;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private EscalationLevel escalationLevel;
+
+    /** Pending re-routing request from the technician (null when none). */
+    @Column(length = 40)
+    private String requestedCategory;
+
+    @Column(length = 500)
+    private String reassignmentReason;
+
     protected IncidentEntity() { }
 
     public IncidentEntity(String id, String description, String category,
@@ -86,6 +98,9 @@ public class IncidentEntity {
         entity.reporterUsername = incident.getReporterUsername();
         entity.serviceName = incident.getServiceName();
         entity.resolution = incident.getResolution();
+        entity.escalationLevel = incident.getEscalationLevel();
+        entity.requestedCategory = incident.getRequestedCategory();
+        entity.reassignmentReason = incident.getReassignmentReason();
         return entity;
     }
 
@@ -99,6 +114,10 @@ public class IncidentEntity {
         incident.setReporterUsername(reporterUsername);
         incident.setServiceName(serviceName);
         incident.setResolution(resolution);
+        if (escalationLevel != null) {
+            incident.setEscalationLevel(escalationLevel);
+        }
+        incident.restoreReassignmentRequest(requestedCategory, reassignmentReason);
         return incident;
     }
 

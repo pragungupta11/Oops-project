@@ -8,6 +8,46 @@
     <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
     <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
 
+    <div class="card border-warning mb-4" th:unless="${#lists.isEmpty(rerouting)}">
+        <div class="card-header bg-warning-subtle">
+            <strong>Re-routing requests</strong>
+            <span class="text-muted small">: technicians report that these incidents have the wrong category</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                <tr><th>ID</th><th>Description</th><th>Category change</th><th>Reason</th>
+                    <th>Current technician</th><th>Decision</th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${rerouting}">
+                    <td th:text="${r.id()}">INC1001</td>
+                    <td class="text-truncate" style="max-width: 200px;" th:text="${r.description()}"
+                        th:title="${r.description()}">Description</td>
+                    <td><span th:text="${r.currentCategory()}">Network</span> &rarr;
+                        <strong th:text="${r.requestedCategory()}">Application</strong></td>
+                    <td th:text="${r.reason()}">reason</td>
+                    <td th:text="${r.technicianName()}">Ravi Kumar</td>
+                    <td>
+                        <form class="d-flex gap-1 mb-1" method="post"
+                              th:action="@{/admin/incidents/{id}/reassign/approve(id=${r.id()})}">
+                            <select name="technicianId" class="form-select form-select-sm">
+                                <option value="auto">Automatic (best match)</option>
+                                <option th:each="t : ${r.skilledTechnicians()}" th:value="${t.getId()}"
+                                        th:text="${t.getName()} + ' (' + ${t.getActiveIncidents()} + ' active)'"></option>
+                            </select>
+                            <button type="submit" class="btn btn-success btn-sm">Approve</button>
+                        </form>
+                        <form method="post" th:action="@{/admin/incidents/{id}/reassign/reject(id=${r.id()})}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Reject</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <form class="row g-2 mb-4" method="get" th:action="@{/admin/incidents}">
         <div class="col-md-2">
             <label class="form-label small mb-0" for="status">Status</label>

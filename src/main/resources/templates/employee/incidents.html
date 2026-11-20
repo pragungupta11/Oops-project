@@ -16,7 +16,7 @@
     <table class="table table-hover align-middle" th:unless="${#lists.isEmpty(rows)}">
         <thead>
         <tr>
-            <th>ID</th><th>Category</th><th>Service</th><th>Priority</th>
+            <th>ID</th><th>Category</th><th>Service</th><th>Urgency</th>
             <th>Status</th><th>Technician</th><th>Reported</th>
         </tr>
         </thead>
@@ -25,7 +25,7 @@
             <td><a th:href="@{/employee/incidents/{id}(id=${i.id()})}" th:text="${i.id()}">INC1001</a></td>
             <td th:text="${i.category()}">Network</td>
             <td th:text="${i.serviceName()}">VPN</td>
-            <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.priority()}">P2</span></td>
+            <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.urgencyLabel()}">High</span></td>
             <td><span class="badge" th:classappend="${i.statusClass()}" th:text="${i.status()}">ASSIGNED</span></td>
             <td th:text="${i.technicianName()}">Ravi Kumar</td>
             <td th:text="${i.created()}">19 Nov 2026, 10:00</td>

@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.iitsm.iitsm.model.EscalationEvent;
 import com.iitsm.iitsm.model.Incident;
 
 @Component
@@ -25,6 +26,11 @@ public class SlaMonitorJob {
         LocalDateTime now = LocalDateTime.now();
         List<Incident> open = source.findOpenIncidents();
         monitor.scan(open, now);
-        escalation.evaluate(open, now);
+        for (EscalationEvent event : escalation.evaluate(open, now)) {
+            open.stream()
+                .filter(i -> i.getId().equals(event.incidentId()))
+                .findFirst()
+                .ifPresent(source::save);
+        }
     }
 }

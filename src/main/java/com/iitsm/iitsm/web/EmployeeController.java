@@ -38,8 +38,11 @@ public class EmployeeController {
         this.slaService = slaService;
     }
 
-    /** Small line shown in the "possible duplicates" warning. */
-    public record DuplicateView(String id, String description, String score) {}
+    /**
+     * Small line shown in the "possible duplicates" warning. Details are only filled in for the
+     * employee's OWN earlier incidents; other people's incidents stay private.
+     */
+    public record DuplicateView(boolean own, String id, String description, String score) {}
 
     @GetMapping("/report")
     public String reportForm(Model model) {
@@ -61,12 +64,17 @@ public class EmployeeController {
                     authentication.getName(), description, Category.valueOf(category),
                     impact, urgency, serviceName);
 
-            List<DuplicateView> duplicates = outcome.duplicates().stream()
-                    .map(m -> new DuplicateView(m.incident().getId(), m.incident().getDescription(),
+            String me = authentication.getName();
+            List<DuplicateView> mine = outcome.duplicates().stream()
+                    .filter(m -> me.equals(m.incident().getReporterUsername()))
+                    .map(m -> new DuplicateView(true, m.incident().getId(), m.incident().getDescription(),
                             Math.round(m.score() * 100) + "%"))
                     .toList();
+            boolean othersReportedIt = outcome.duplicates().stream()
+                    .anyMatch(m -> !me.equals(m.incident().getReporterUsername()));
             redirect.addFlashAttribute("justCreated", true);
-            redirect.addFlashAttribute("duplicates", duplicates);
+            redirect.addFlashAttribute("duplicates", mine);
+            redirect.addFlashAttribute("othersReportedIt", othersReportedIt);
             // Redirect so that refreshing the page does not file the same incident twice.
             return "redirect:/employee/incidents/" + outcome.incident().getId();
         } catch (InvalidIncidentDataException | TechnicianUnavailableException | IllegalArgumentException e) {

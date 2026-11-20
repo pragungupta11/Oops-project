@@ -17,6 +17,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.iitsm.iitsm.exception.InvalidIncidentDataException;
 import com.iitsm.iitsm.exception.InvalidStateTransitionException;
+import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.service.SlaService;
@@ -56,6 +57,9 @@ public class TechnicianController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This incident is not assigned to you");
         }
         model.addAttribute("incident", IncidentView.of(incident, slaService));
+        model.addAttribute("categories", Category.values());
+        model.addAttribute("pendingCategory", incident.getRequestedCategory());
+        model.addAttribute("pendingReason", incident.getReassignmentReason());
         return "technician/incident-detail";
     }
 
@@ -94,6 +98,25 @@ public class TechnicianController {
         try {
             workflow.resolve(id, authentication.getName(), resolution);
             redirect.addFlashAttribute("message", "Incident resolved.");
+        } catch (InvalidStateTransitionException | InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/technician/incidents/" + id;
+    }
+
+    /** Wrong category: ask the admin to re-route this incident to the right kind of technician. */
+    @PostMapping("/incidents/{id}/reassign")
+    public String requestReassignment(@PathVariable("id") String id,
+                                      @RequestParam("category") String category,
+                                      @RequestParam("reason") String reason,
+                                      Authentication authentication, RedirectAttributes redirect) {
+        try {
+            String label = Category.valueOf(category).label();
+            workflow.requestReassignment(id, authentication.getName(), label, reason);
+            redirect.addFlashAttribute("message",
+                    "Re-routing to " + label + " requested. The admin will review it; keep the incident until then.");
         } catch (InvalidStateTransitionException | InvalidIncidentDataException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         } catch (IllegalArgumentException e) {
