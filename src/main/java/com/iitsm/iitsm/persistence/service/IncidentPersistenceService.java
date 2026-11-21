@@ -55,29 +55,4 @@ public class IncidentPersistenceService {
     public List<Incident> findByStatus(IncidentStatus status) {
         return incidentRepository.findByStatus(status).stream().map(IncidentEntity::toDomain).toList();
     }
-
-    @Transactional
-    public Incident changeStatus(String incidentId, IncidentStatus newStatus) {
-        IncidentEntity incident = incidentRepository.findById(incidentId)
-                .orElseThrow(() -> new IllegalArgumentException("Incident not found: " + incidentId));
-        IncidentStatus previous = incident.getStatus();
-        incident.setStatus(newStatus);
-        IncidentEntity saved = incidentRepository.save(incident);
-        auditService.record("INCIDENT_STATUS_CHANGED", "INCIDENT", incidentId,
-                "Status changed from " + previous + " to " + newStatus);
-        return saved.toDomain();
-    }
-
-    @Transactional
-    public Incident assignTechnician(String incidentId, String technicianId) {
-        IncidentEntity incident = incidentRepository.findById(incidentId)
-                .orElseThrow(() -> new IllegalArgumentException("Incident not found: " + incidentId));
-        TechnicianEntity technician = technicianRepository.findById(technicianId)
-                .orElseThrow(() -> new IllegalArgumentException("Technician not found: " + technicianId));
-        incident.setAssignedTechnician(technician);
-        IncidentEntity saved = incidentRepository.save(incident);
-        auditService.record("INCIDENT_ASSIGNED", "INCIDENT", incidentId,
-                "Assigned to technician " + technicianId);
-        return saved.toDomain();
-    }
 }

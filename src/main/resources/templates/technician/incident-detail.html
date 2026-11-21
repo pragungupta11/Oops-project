@@ -134,6 +134,41 @@
     </div>
 
     <div class="page mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Conversation &amp; investigation notes</h5>
+            <span class="badge text-bg-warning" th:if="${awaitingInfo}"><i class="bi bi-hourglass"></i> Waiting for the employee's reply</span>
+        </div>
+        <div class="alert alert-success py-2" th:if="${feedback != null}">
+            <strong>Employee feedback:</strong>
+            <span th:replace="~{fragments/conversation :: stars(${feedback.rating()})}"></span>
+            <span th:text="${feedback.comment()}">Thanks!</span>
+        </div>
+        <div th:replace="~{fragments/conversation :: thread(${thread})}"></div>
+        <p class="text-body-secondary small mb-0" th:if="${incident.status() == 'VERIFIED' or incident.status() == 'CLOSED'}">
+            <i class="bi bi-lock"></i> This incident is closed; the conversation is read-only.
+        </p>
+        <p class="text-body-secondary small mb-2" th:if="${incident.status() == 'RESOLVED'}">
+            <i class="bi bi-info-circle"></i> Resolved and waiting for the admin's verification:
+            you can still add a root-cause note or reply to the employee.
+        </p>
+        <form th:unless="${incident.status() == 'VERIFIED' or incident.status() == 'CLOSED'}"
+              method="post" th:action="@{/technician/incidents/{id}/comment(id=${incident.id()})}">
+            <div class="row g-2 mb-2">
+                <div class="col-md-5">
+                    <select name="kind" class="form-select" aria-label="Kind of entry">
+                        <option value="NOTE" th:text="${incident.status() == 'RESOLVED'} ? 'Root-cause / follow-up note (internal)' : 'Internal investigation note'">Internal investigation note</option>
+                        <option value="MESSAGE">Message to the employee</option>
+                        <option value="INFO_REQUEST" th:if="${incident.open()}">Ask the employee for more information</option>
+                    </select>
+                </div>
+            </div>
+            <textarea name="text" class="form-control mb-2" rows="2" maxlength="1000" required
+                      aria-label="Text"></textarea>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Add</button>
+        </form>
+    </div>
+
+    <div class="page mb-3">
         <div th:replace="~{fragments/timeline :: timeline(${history})}"></div>
     </div>
 

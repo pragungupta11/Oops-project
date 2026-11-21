@@ -42,6 +42,7 @@ public class IncidentWorkflowService {
     private final ServiceCatalog catalog;
     private final AuditService audit;
     private final ApplicationEventPublisher events;
+    private final com.iitsm.iitsm.repository.IncidentCommentRepository comments;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
@@ -50,7 +51,8 @@ public class IncidentWorkflowService {
                                    TechnicianPersistenceService technicians,
                                    ServiceCatalog catalog,
                                    AuditService audit,
-                                   ApplicationEventPublisher events) {
+                                   ApplicationEventPublisher events,
+                                   com.iitsm.iitsm.repository.IncidentCommentRepository comments) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
@@ -59,6 +61,7 @@ public class IncidentWorkflowService {
         this.catalog = catalog;
         this.audit = audit;
         this.events = events;
+        this.comments = comments;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -200,6 +203,126 @@ public class IncidentWorkflowService {
         Incident saved = saveAndCascade(incident);
         events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
         return saved;
+    }
+
+    // ------------------------------------------------------------ employee confirms or reopens
+
+    /** The employee confirms the fix works: RESOLVED -> VERIFIED -> CLOSED. */
+    @Transactional
+    public Incident confirmResolution(String incidentId, String employee) {
+        Incident incident = loadResolvedOwnIncident(incidentId, employee);
+        incident.transitionTo(IncidentStatus.VERIFIED);
+        saveAndCascade(incident);
+        incident.transitionTo(IncidentStatus.CLOSED);
+        Incident saved = saveAndCascade(incident);
+        audit.record("RESOLUTION_CONFIRMED", "INCIDENT", incidentId, employee + " confirmed the fix works");
+        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
+        return saved;
+    }
+
+    /**
+     * The employee says it is still broken: RESOLVED -> IN_PROGRESS with the same technician,
+     * who gets the workload back. The reason goes into the conversation.
+     */
+    @Transactional
+    public Incident reopen(String incidentId, String employee, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new InvalidIncidentDataException("Please tell the technician what is still wrong");
+        }
+        String why = reason.trim();
+        if (why.length() > 1000) {
+            throw new InvalidIncidentDataException("Please keep it under 1000 characters");
+        }
+        Incident incident = loadResolvedOwnIncident(incidentId, employee);
+        String previousFix = incident.getResolution();
+        incident.transitionTo(IncidentStatus.IN_PROGRESS);
+        incident.setResolvedAt(null);
+        incident.setResolution(null);
+
+        Technician tech = incident.getAssignedTechnician();
+        if (tech != null) {
+            Technician fresh = technicians.findById(tech.getId());
+            fresh.incrementActiveIncidents();
+            technicians.save(fresh);
+        }
+        Incident saved = incidents.save(incident);
+
+        // linked reports were resolved together with it, so they reopen together too
+        for (Incident child : incidents.findAll()) {
+            if (incidentId.equals(child.getParentId()) && child.getStatus() == IncidentStatus.RESOLVED) {
+                child.transitionTo(IncidentStatus.IN_PROGRESS);
+                child.setResolvedAt(null);
+                child.setResolution(null);
+                incidents.save(child);
+            }
+        }
+        comments.save(new com.iitsm.iitsm.persistence.entity.IncidentCommentEntity(incidentId, employee, "EMPLOYEE",
+                com.iitsm.iitsm.model.CommentKind.MESSAGE, "Still not fixed: " + why));
+        audit.record("INCIDENT_REOPENED", "INCIDENT", incidentId,
+                "Reopened by " + employee + ": " + why + (previousFix == null ? "" : " (previous fix: " + previousFix + ")"));
+        events.publishEvent(new IncidentEvent(IncidentEventType.REOPENED, saved));
+        return saved;
+    }
+
+    /**
+     * Admin override for exceptions (dispute, employee unavailable, duplicate): closes a resolved
+     * incident without waiting for the employee. Routine confirmation is the employee's job.
+     */
+    @Transactional
+    public Incident adminClose(String incidentId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new InvalidIncidentDataException("Give a reason for closing without the employee's confirmation");
+        }
+        Incident incident = incidents.findById(incidentId);
+        if (incident.isLinked()) {
+            throw new InvalidIncidentDataException("This report closes together with " + incident.getParentId());
+        }
+        if (incident.getStatus() == IncidentStatus.RESOLVED) {
+            incident.transitionTo(IncidentStatus.VERIFIED);
+            saveAndCascade(incident);
+        }
+        incident.transitionTo(IncidentStatus.CLOSED);   // throws if it was not resolved/verified
+        Incident saved = saveAndCascade(incident);
+        audit.record("CLOSED_BY_ADMIN", "INCIDENT", incidentId, "Closed without the employee's confirmation: " + reason.trim());
+        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
+        return saved;
+    }
+
+    /**
+     * Closes resolved incidents nobody confirmed or reopened since {@code cutoff}.
+     * Linked reports are skipped here: they close together with their parent.
+     */
+    @Transactional
+    public int autoCloseResolvedBefore(LocalDateTime cutoff) {
+        int closed = 0;
+        for (Incident incident : incidents.findByStatus(IncidentStatus.RESOLVED)) {
+            if (incident.isLinked() || incident.getResolvedAt() == null || !incident.getResolvedAt().isBefore(cutoff)) {
+                continue;
+            }
+            incident.transitionTo(IncidentStatus.VERIFIED);
+            saveAndCascade(incident);
+            incident.transitionTo(IncidentStatus.CLOSED);
+            Incident saved = saveAndCascade(incident);
+            audit.record("AUTO_CLOSED", "INCIDENT", incident.getId(),
+                    "Closed automatically: no answer from the employee since " + incident.getResolvedAt());
+            events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
+            closed++;
+        }
+        return closed;
+    }
+
+    private Incident loadResolvedOwnIncident(String incidentId, String employee) {
+        Incident incident = incidents.findById(incidentId);
+        if (!employee.equals(incident.getReporterUsername())) {
+            throw new AccessDeniedException("This is not your incident");
+        }
+        if (incident.isLinked()) {
+            throw new InvalidIncidentDataException("This report follows a larger incident and closes together with it");
+        }
+        if (incident.getStatus() != IncidentStatus.RESOLVED) {
+            throw new InvalidIncidentDataException("Only a resolved incident can be confirmed or reopened");
+        }
+        return incident;
     }
 
     // ------------------------------------------------------------ re-routing (reassignment)

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Audit log')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container-fluid px-4 mb-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-journal-text"></i> Audit log</h2>
+            <div class="small text-body-secondary">Every important action: who, what, when. Records are never edited. Latest 300 shown.</div>
+        </div>
+        <form class="d-flex gap-2" method="get" th:action="@{/admin/audit}">
+            <input class="form-control" type="search" name="q" th:value="${q}" placeholder="Search: INC1001, tech2, ESCALATED..."
+                   aria-label="Search the audit log" style="min-width: 280px;">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
+        </form>
+    </div>
+    <div class="page p-2 table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th></tr></thead>
+            <tbody>
+            <tr th:if="${#lists.isEmpty(rows)}"><td colspan="5" class="text-body-secondary">No matching entries.</td></tr>
+            <tr th:each="r : ${rows}">
+                <td class="text-nowrap small" th:text="${r.time()}">20 Nov 2026, 10:00:00</td>
+                <td th:text="${r.actor()}">admin</td>
+                <td><code th:text="${r.action()}">INCIDENT_CREATED</code></td>
+                <td class="text-nowrap" th:text="${r.entity()}">INCIDENT INC1001</td>
+                <td class="small" th:text="${r.details()}">details</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

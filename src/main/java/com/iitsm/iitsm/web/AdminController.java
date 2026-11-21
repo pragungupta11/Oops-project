@@ -32,7 +32,7 @@ import com.iitsm.iitsm.service.SlaService;
 @Controller
 @RequestMapping("/admin")
 public class AdminController {
-    private static final List<String> SLA_OPTIONS = List.of("OK", "AT_RISK", "VIOLATED");
+    private static final List<String> SLA_OPTIONS = List.of("OK", "AT_RISK", "VIOLATED", "MET");
 
     private final IncidentPersistenceService incidents;
     private final TechnicianPersistenceService technicians;
@@ -40,17 +40,26 @@ public class AdminController {
     private final IncidentWorkflowService workflow;
     private final AssignmentStrategyRegistry strategies;
     private final UiLabels labels;
+    private final IncidentConversationService conversation;
+    private final com.iitsm.iitsm.repository.AuditLogRepository auditLogs;
+    private final com.iitsm.iitsm.service.SlaConfigurationService slaConfig;
 
     public AdminController(IncidentPersistenceService incidents, TechnicianPersistenceService technicians,
                            SlaService slaService, IncidentWorkflowService workflow,
                            AssignmentStrategyRegistry strategies,
-                           UiLabels labels) {
+                           UiLabels labels,
+                           com.iitsm.iitsm.service.SlaConfigurationService slaConfig,
+                           com.iitsm.iitsm.repository.AuditLogRepository auditLogs,
+                           IncidentConversationService conversation) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
         this.workflow = workflow;
         this.strategies = strategies;
         this.labels = labels;
+        this.slaConfig = slaConfig;
+        this.auditLogs = auditLogs;
+        this.conversation = conversation;
     }
 
     /** One bar on the dashboard. */
@@ -111,23 +120,14 @@ public class AdminController {
         return "admin/incidents";
     }
 
-    @PostMapping("/incidents/{id}/verify")
-    public String verify(@PathVariable("id") String id, RedirectAttributes redirect) {
+    /** Exception only: close a resolved incident without waiting for the employee (reason required). */
+    @PostMapping("/incidents/{id}/close-now")
+    public String closeNow(@PathVariable("id") String id, @RequestParam("reason") String reason,
+                           RedirectAttributes redirect) {
         try {
-            workflow.verify(id);
-            redirect.addFlashAttribute("message", id + " verified.");
-        } catch (InvalidStateTransitionException | IllegalArgumentException e) {
-            redirect.addFlashAttribute("error", e.getMessage());
-        }
-        return "redirect:/admin/incidents";
-    }
-
-    @PostMapping("/incidents/{id}/close")
-    public String close(@PathVariable("id") String id, RedirectAttributes redirect) {
-        try {
-            workflow.close(id);
-            redirect.addFlashAttribute("message", id + " closed.");
-        } catch (InvalidStateTransitionException | IllegalArgumentException e) {
+            workflow.adminClose(id, reason);
+            redirect.addFlashAttribute("message", id + " closed by admin override.");
+        } catch (InvalidStateTransitionException | InvalidIncidentDataException | IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/admin/incidents";
@@ -172,6 +172,73 @@ public class AdminController {
         return "redirect:/admin/incidents";
     }
 
+    // ---------------------------------------------------------------- audit log
+
+    /** One row of the audit log page. */
+    public record AuditRow(String time, String actor, String action, String entity, String details) {}
+
+    private static final java.time.format.DateTimeFormatter AUDIT_TIME =
+            java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss", java.util.Locale.ENGLISH)
+                    .withZone(java.time.ZoneId.systemDefault());
+
+    /** Every recorded action, newest first; optional search over all columns. Shows the latest 300. */
+    @GetMapping("/audit")
+    public String auditLog(@RequestParam(name = "q", defaultValue = "") String q, Model model) {
+        String query = q.trim();
+        List<AuditRow> rows = auditLogs.findAllByOrderByOccurredAtDesc().stream()
+                .map(a -> new AuditRow(AUDIT_TIME.format(a.getOccurredAt()), a.getActor(), a.getAction(),
+                        a.getEntityType() + " " + a.getEntityId(), a.getDetails()))
+                .filter(r -> query.isEmpty() || containsIgnoreCase(r.actor(), query) || containsIgnoreCase(r.action(), query)
+                        || containsIgnoreCase(r.entity(), query) || containsIgnoreCase(r.details(), query))
+                .limit(300)
+                .toList();
+        model.addAttribute("rows", rows);
+        model.addAttribute("q", q);
+        return "admin/audit";
+    }
+
+    // ---------------------------------------------------------------- SLA policies
+
+    /** One row of the SLA policy table. */
+    public record SlaRow(String priority, String urgency, long responseMinutes, long resolutionMinutes) {}
+
+    @GetMapping("/sla")
+    public String slaPolicies(Model model) {
+        List<SlaRow> rows = slaConfig.current().entrySet().stream()
+                .map(e -> new SlaRow(e.getKey().name(), urgencyWord(e.getKey()),
+                        e.getValue().responseTarget().toMinutes(), e.getValue().resolutionTarget().toMinutes()))
+                .toList();
+        model.addAttribute("rows", rows);
+        return "admin/sla";
+    }
+
+    @PostMapping("/sla/{priority}")
+    public String saveSlaPolicy(@PathVariable("priority") String priority,
+                                @RequestParam("responseMinutes") long responseMinutes,
+                                @RequestParam("resolutionMinutes") long resolutionMinutes,
+                                RedirectAttributes redirect) {
+        try {
+            Priority p = Priority.valueOf(priority);
+            slaConfig.update(p, responseMinutes, resolutionMinutes);
+            redirect.addFlashAttribute("message", p + " now: respond within " + responseMinutes
+                    + " min, resolve within " + resolutionMinutes + " min.");
+        } catch (com.iitsm.iitsm.exception.InvalidSlaConfigurationException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", "Unknown priority: " + priority);
+        }
+        return "redirect:/admin/sla";
+    }
+
+    private static String urgencyWord(Priority p) {
+        return switch (p) {
+            case P1 -> "Critical";
+            case P2 -> "High";
+            case P3 -> "Medium";
+            case P4 -> "Low";
+        };
+    }
+
     // ---------------------------------------------------------------- dashboard
 
     @GetMapping("/dashboard")
@@ -208,12 +275,20 @@ public class AdminController {
         all.forEach(v -> perCategory.merge(v.category(), 1L, Long::sum));
         model.addAttribute("categoryLabels", new java.util.ArrayList<>(perCategory.keySet()));
         model.addAttribute("categoryCounts", new java.util.ArrayList<>(perCategory.values()));
+        java.util.Set<String> reopened = auditLogs.findAll().stream()
+                .filter(a -> "INCIDENT_REOPENED".equals(a.getAction()))
+                .map(a -> a.getEntityId())
+                .collect(java.util.stream.Collectors.toSet());
+        model.addAttribute("reopened", reopened);
         model.addAttribute("attention", all.stream()
-                .filter(v -> v.sla().equals("VIOLATED") || v.sla().equals("AT_RISK")
-                        || !v.escalation().isEmpty() && v.open() || v.status().equals("RESOLVED"))
-                .sorted(Comparator.comparing((IncidentView v) -> attentionRank(v)))
+                .filter(v -> v.open() && (v.sla().equals("VIOLATED") || v.sla().equals("AT_RISK")
+                        || !v.escalation().isEmpty() || reopened.contains(v.id())))
+                .sorted(Comparator.comparing((IncidentView v) -> attentionRank(v, reopened)))
                 .limit(8)
                 .toList());
+        model.addAttribute("avgRating", conversation.averageRating()
+                .map(r -> String.format(java.util.Locale.ENGLISH, "%.1f", r)).orElse("-"));
+        model.addAttribute("ratingCount", conversation.feedbackCount());
         model.addAttribute("refreshedAt", java.time.LocalTime.now().withNano(0).toString());
 
         model.addAttribute("total", total);
@@ -229,12 +304,12 @@ public class AdminController {
         return "admin/dashboard";
     }
 
-    /** Lower = more urgent: violated, escalated, at risk, then waiting for verification. */
-    private static int attentionRank(IncidentView v) {
+    /** Lower = more urgent: violated, escalated, reopened by the employee, then at risk. */
+    private static int attentionRank(IncidentView v, java.util.Set<String> reopened) {
         if (v.sla().equals("VIOLATED")) return 0;
-        if (!v.escalation().isEmpty() && v.open()) return 1;
-        if (v.sla().equals("AT_RISK")) return 2;
-        return 3;
+        if (!v.escalation().isEmpty()) return 1;
+        if (reopened.contains(v.id())) return 2;
+        return 3;   // at risk
     }
 
     @PostMapping("/strategy")

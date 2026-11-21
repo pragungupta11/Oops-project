@@ -20,10 +20,13 @@ public class SecurityConfiguration {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .csrf(csrf -> csrf.disable())
+                // CSRF protection ON: every form gets a hidden token automatically (th:action).
+                // Only the H2 console (admin-only, development tool) is excluded.
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**"))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/h2-console/**", "/login", "/error").permitAll()
+                        .requestMatchers("/login", "/error").permitAll()
+                        .requestMatchers("/h2-console/**").hasRole("ADMIN")
                         .requestMatchers("/employee/**").hasRole("EMPLOYEE")
                         .requestMatchers("/technician/**").hasRole("TECHNICIAN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")

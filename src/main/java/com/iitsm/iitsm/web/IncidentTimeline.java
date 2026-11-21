@@ -81,6 +81,23 @@ public class IncidentTimeline {
                 case "INCIDENT_ESCALATED" -> {
                     if (staffView) entries.add(new Entry(time, "Escalated", details, "arrow-up-circle", "danger"));
                 }
+                case "INFO_REQUESTED" -> entries.add(new Entry(time, "More information requested",
+                        staffView ? details : "", "question-circle", "warning"));
+                case "INFO_PROVIDED" -> entries.add(new Entry(time, "Information provided by the employee", "",
+                        "reply", "info"));
+                case "RESOLUTION_CONFIRMED" -> entries.add(new Entry(time, "Fix confirmed by the employee", "",
+                        "hand-thumbs-up", "success"));
+                case "INCIDENT_REOPENED" -> entries.add(new Entry(time,
+                        staffView ? "Reopened by the employee" : "Reopened: you reported it is still not fixed",
+                        staffView ? details : "", "arrow-counterclockwise", "danger"));
+                case "CLOSED_BY_ADMIN" -> entries.add(new Entry(time, "Closed by an administrator",
+                        staffView ? details : "", "shield-check", "dark"));
+                case "AUTO_CLOSED" -> entries.add(new Entry(time, "Closed automatically",
+                        staffView ? details : "No answer received, so it was closed", "clock", "dark"));
+                case "FEEDBACK_GIVEN" -> entries.add(new Entry(time, "Feedback received", details, "star", "success"));
+                case "NOTE_ADDED" -> {
+                    if (staffView) entries.add(new Entry(time, "Investigation note", details, "journal", "secondary"));
+                }
                 default -> { /* other audit rows are not interesting on the timeline */ }
             }
         }

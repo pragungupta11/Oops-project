@@ -61,7 +61,7 @@ class NotificationFlowTest {
     }
 
     @Test
-    void resolvingNotifiesTheEmployeeAndAsksAdminsToVerify() {
+    void resolvingAsksTheEmployeeToConfirm() {
         Incident inc = workflow.report("employee2", "Meeting room speaker crackles loudly",
                 Category.NETWORK, 2, 2, "Intranet").incident();
         String tech = inc.getAssignedTechnician().getId();
@@ -69,9 +69,7 @@ class NotificationFlowTest {
         workflow.start(inc.getId(), tech);
         workflow.resolve(inc.getId(), tech, "Replaced the speaker cable");
 
-        assertTrue(inAppHas("employee2", inc.getId(), "resolved"));
-        assertTrue(notificationService.adminUsernames().stream()
-                .allMatch(admin -> inAppHas(admin, inc.getId(), "verification")));
+        assertTrue(inAppHas("employee2", inc.getId(), "is it fixed?"));   // the employee confirms, not the admin
     }
 
     @Test

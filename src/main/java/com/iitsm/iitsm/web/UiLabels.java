@@ -30,6 +30,7 @@ public class UiLabels {
             case "OK" -> "On track";
             case "AT_RISK" -> "At risk";
             case "VIOLATED" -> "Violated";
+            case "MET" -> "Met";
             default -> code;
         };
     }

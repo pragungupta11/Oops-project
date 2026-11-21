@@ -126,13 +126,15 @@
             <td th:text="${i.reporter()}">employee1</td>
             <td th:text="${i.created()}">19 Nov 2026, 10:00</td>
             <td>
-                <form th:if="${i.status() == 'RESOLVED'}" method="post"
-                      th:action="@{/admin/incidents/{id}/verify(id=${i.id()})}">
-                    <button type="submit" class="btn btn-success btn-sm">Verify</button>
-                </form>
-                <form th:if="${i.status() == 'VERIFIED'}" method="post"
-                      th:action="@{/admin/incidents/{id}/close(id=${i.id()})}">
-                    <button type="submit" class="btn btn-dark btn-sm">Close</button>
+                <span class="small text-body-secondary" th:if="${i.status() == 'RESOLVED' and !i.linked()}">
+                    <i class="bi bi-hourglass"></i> waiting for employee
+                </span>
+                <form th:if="${(i.status() == 'RESOLVED' or i.status() == 'VERIFIED') and !i.linked()}" method="post"
+                      th:action="@{/admin/incidents/{id}/close-now(id=${i.id()})}"
+                      onsubmit="const r = prompt('Close without the employee\'s confirmation. Reason:'); if (!r) return false; this.reason.value = r;">
+                    <input type="hidden" name="reason">
+                    <button type="submit" class="btn btn-outline-dark btn-sm" title="Exception only: dispute, employee unavailable, duplicate">
+                        Close now</button>
                 </form>
                 <form th:if="${i.linked() and i.status() != 'RESOLVED' and i.status() != 'VERIFIED' and i.status() != 'CLOSED'}"
                       method="post" th:action="@{/admin/incidents/{id}/unlink(id=${i.id()})}">

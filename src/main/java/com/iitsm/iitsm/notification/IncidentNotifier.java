@@ -61,13 +61,15 @@ public class IncidentNotifier implements SlaAlertListener, EscalationListener {
             case UNLINKED -> send(tech, id + " assigned to you",
                     id + " was separated from another incident and assigned to you: " + brief(i), id);
             case RESOLVED -> {
-                send(employee, id + " resolved", "Your incident has been resolved: " + i.getResolution(), id);
-                if (!i.isLinked()) {   // admins verify the original, not every linked report
-                    sendAll(notifications.adminUsernames(), id + " waiting for verification",
-                            id + " was resolved by " + techName + ". Please verify and close it.", id);
-                }
+                send(employee, id + " resolved: is it fixed?", "Your incident has been resolved: " + i.getResolution()
+                        + (i.isLinked() ? "" : " Please confirm on the incident page whether it is fixed."), id);
             }
-            case CLOSED -> send(employee, id + " closed", "Your incident has been verified and closed.", id);
+            case REOPENED -> {
+                send(tech, id + " reopened",
+                        "The employee reports " + id + " is still not fixed. Their reason is in the conversation.", id);
+                sendAll(notifications.adminUsernames(), id + " reopened", id + " was reopened by the employee.", id);
+            }
+            case CLOSED -> send(employee, id + " closed", "Your incident has been closed. Thank you!", id);
         }
     }
 

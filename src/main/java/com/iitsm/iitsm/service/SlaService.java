@@ -3,8 +3,8 @@ import org.springframework.stereotype.Service ;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.iitsm.iitsm.exception.MissingSlaConfigurationException;
 import com.iitsm.iitsm.model.Priority;
@@ -16,7 +16,9 @@ import com.iitsm.iitsm.model.SlaStatus;
 public class SlaService {
     private static final double RISK_THRESHOLD = 0.7;
 
-    private final Map<Priority, SlaPolicy> policies = new EnumMap<>(Priority.class);
+    // Thread-safe: the admin may change a policy while the SLA job and web requests read them.
+    // Starts with the PDF's defaults; SlaConfigurationService replaces them with the database values.
+    private final Map<Priority, SlaPolicy> policies = new ConcurrentHashMap<>();
 
     public SlaService() {
         policies.put(Priority.P1, new SlaPolicy(Duration.ofMinutes(5), Duration.ofMinutes(30)));
@@ -25,9 +27,13 @@ public class SlaService {
         policies.put(Priority.P4, new SlaPolicy(Duration.ofHours(4), Duration.ofHours(24)));
     }
 
-    /** Lets an admin change a policy later. */
+    /** Replaces one policy (null removes it, which makes that priority "not configured"). */
     public void setPolicy(Priority priority, SlaPolicy policy) {
-        policies.put(priority, policy);
+        if (policy == null) {
+            policies.remove(priority);
+        } else {
+            policies.put(priority, policy);
+        }
     }
 
     public SlaPolicy getPolicy(Priority priority) {

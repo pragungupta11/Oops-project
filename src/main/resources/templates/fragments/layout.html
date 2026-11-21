@@ -68,6 +68,8 @@
             <li class="nav-item" th:if="${isTechnician}"><a class="nav-link" th:href="@{/technician/incidents}"><i class="bi bi-inboxes"></i> My queue</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/dashboard}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/incidents}"><i class="bi bi-table"></i> All incidents</a></li>
+            <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/sla}"><i class="bi bi-stopwatch"></i> SLA policies</a></li>
+            <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/audit}"><i class="bi bi-journal-text"></i> Audit log</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/outbox}"><i class="bi bi-envelope"></i> Email outbox</a></li>
         </ul>
         <div class="d-flex align-items-center gap-2">

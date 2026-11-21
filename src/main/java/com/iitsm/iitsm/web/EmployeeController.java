@@ -34,17 +34,23 @@ public class EmployeeController {
     private final SlaService slaService;
     private final CategorySuggester categorySuggester;
     private final IncidentTimeline timeline;
+    private final IncidentConversationService conversation;
+    private final com.iitsm.iitsm.service.AutoCloseJob autoClose;
 
     public EmployeeController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                               ServiceCatalog catalog, SlaService slaService,
                               CategorySuggester categorySuggester,
-                              IncidentTimeline timeline) {
+                              IncidentTimeline timeline,
+                              IncidentConversationService conversation,
+                              com.iitsm.iitsm.service.AutoCloseJob autoClose) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.catalog = catalog;
         this.slaService = slaService;
         this.categorySuggester = categorySuggester;
         this.timeline = timeline;
+        this.conversation = conversation;
+        this.autoClose = autoClose;
     }
 
     /** What the report form shows under the category box. */
@@ -117,6 +123,74 @@ public class EmployeeController {
         return "employee/incidents";
     }
 
+    /** "Yes, it's fixed": the employee confirms and the incident is closed. */
+    @PostMapping("/incidents/{id}/confirm")
+    public String confirm(@PathVariable("id") String id, Authentication authentication, RedirectAttributes redirect) {
+        try {
+            workflow.confirmResolution(id, authentication.getName());
+            redirect.addFlashAttribute("message", "Great, glad it is fixed! The incident is now closed.");
+        } catch (InvalidIncidentDataException | com.iitsm.iitsm.exception.InvalidStateTransitionException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/employee/incidents/" + id;
+    }
+
+    /** "No, still broken": back to the technician with the employee's reason. */
+    @PostMapping("/incidents/{id}/reopen")
+    public String reopen(@PathVariable("id") String id, @RequestParam("reason") String reason,
+                         Authentication authentication, RedirectAttributes redirect) {
+        try {
+            workflow.reopen(id, authentication.getName(), reason);
+            redirect.addFlashAttribute("message", "Sorry about that. The incident is back with your technician.");
+        } catch (InvalidIncidentDataException | com.iitsm.iitsm.exception.InvalidStateTransitionException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/employee/incidents/" + id;
+    }
+
+    private static String readable(java.time.Duration d) {
+        long days = d.toDays();
+        if (days >= 1 && d.equals(java.time.Duration.ofDays(days))) return days + (days == 1 ? " day" : " days");
+        long hours = d.toHours();
+        if (hours >= 1) return hours + (hours == 1 ? " hour" : " hours");
+        return d.toMinutes() + " minutes";
+    }
+
+    /** Employee adds information or answers the technician's question. */
+    @PostMapping("/incidents/{id}/message")
+    public String addMessage(@PathVariable("id") String id, @RequestParam("text") String text,
+                             Authentication authentication, RedirectAttributes redirect) {
+        try {
+            conversation.addEmployeeMessage(id, authentication.getName(), text);
+            redirect.addFlashAttribute("message", "Sent. Your technician has been notified.");
+        } catch (InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/employee/incidents/" + id;
+    }
+
+    /** Employee rates the service after resolution (1-5 stars). */
+    @PostMapping("/incidents/{id}/feedback")
+    public String giveFeedback(@PathVariable("id") String id, @RequestParam("rating") int rating,
+                               @RequestParam(name = "comment", required = false) String comment,
+                               Authentication authentication, RedirectAttributes redirect) {
+        try {
+            conversation.giveFeedback(id, authentication.getName(), rating, comment);
+            redirect.addFlashAttribute("message", "Thank you for your feedback!");
+        } catch (InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/employee/incidents/" + id;
+    }
+
     @GetMapping("/incidents/{id}")
     public String detail(@PathVariable("id") String id, Authentication authentication, Model model) {
         Incident incident;
@@ -130,6 +204,13 @@ public class EmployeeController {
         }
         model.addAttribute("incident", IncidentView.of(incident, slaService));
         model.addAttribute("history", timeline.forIncident(incident.getId(), false));
+        model.addAttribute("thread", conversation.thread(incident.getId(), false));
+        model.addAttribute("awaitingInfo", conversation.isAwaitingInfo(incident.getId()));
+        model.addAttribute("feedback", conversation.feedbackFor(incident.getId()).orElse(null));
+        model.addAttribute("canConfirm", incident.getStatus() == com.iitsm.iitsm.model.IncidentStatus.RESOLVED
+                && !incident.isLinked());
+        model.addAttribute("autoCloseText", readable(autoClose.autoCloseAfter()));
+        model.addAttribute("canMessage", incident.getStatus() != com.iitsm.iitsm.model.IncidentStatus.CLOSED);
         return "employee/incident-detail";
     }
 

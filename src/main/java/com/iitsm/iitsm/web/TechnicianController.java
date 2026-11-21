@@ -30,14 +30,17 @@ public class TechnicianController {
     private final IncidentPersistenceService incidents;
     private final SlaService slaService;
     private final IncidentTimeline timeline;
+    private final IncidentConversationService conversation;
 
     public TechnicianController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                                 SlaService slaService,
-                                IncidentTimeline timeline) {
+                                IncidentTimeline timeline,
+                                IncidentConversationService conversation) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.slaService = slaService;
         this.timeline = timeline;
+        this.conversation = conversation;
     }
 
     /** The suspected original incident, shown next to the "Link" / "Not the same" buttons. */
@@ -66,6 +69,9 @@ public class TechnicianController {
         model.addAttribute("incident", IncidentView.of(incident, slaService));
         model.addAttribute("categories", Category.values());
         model.addAttribute("history", timeline.forIncident(incident.getId(), true));
+        model.addAttribute("thread", conversation.thread(incident.getId(), true));
+        model.addAttribute("awaitingInfo", conversation.isAwaitingInfo(incident.getId()));
+        model.addAttribute("feedback", conversation.feedbackFor(incident.getId()).orElse(null));
 
         // Acknowledging late is allowed (work must continue), but the technician should know.
         long minutesLate = 0;
@@ -205,6 +211,33 @@ public class TechnicianController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
         }
         return "redirect:/technician/incidents";
+    }
+
+    /** Message to the employee, internal investigation note, or a request for more information. */
+    @PostMapping("/incidents/{id}/comment")
+    public String addComment(@PathVariable("id") String id, @RequestParam("kind") String kind,
+                             @RequestParam("text") String text,
+                             Authentication authentication, RedirectAttributes redirect) {
+        com.iitsm.iitsm.model.CommentKind k;
+        try {
+            k = com.iitsm.iitsm.model.CommentKind.valueOf(kind);
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", "Choose what kind of entry this is");
+            return "redirect:/technician/incidents/" + id;
+        }
+        try {
+            conversation.addTechnicianEntry(id, authentication.getName(), k, text);
+            redirect.addFlashAttribute("message", switch (k) {
+                case NOTE -> "Investigation note saved (only staff can see it).";
+                case MESSAGE -> "Message sent to the employee.";
+                case INFO_REQUEST -> "Information requested. The employee has been notified.";
+            });
+        } catch (InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
+        }
+        return "redirect:/technician/incidents/" + id;
     }
 
     private Incident find(String id) {

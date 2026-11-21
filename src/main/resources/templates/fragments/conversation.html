@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="thread(entries)">
+    <p class="text-body-secondary small" th:if="${#lists.isEmpty(entries)}">No messages yet.</p>
+    <div class="d-grid gap-2 mb-3" th:unless="${#lists.isEmpty(entries)}">
+        <div th:each="c : ${entries}" class="border rounded-3 p-2 px-3"
+             th:classappend="${c.kind() == 'NOTE'} ? 'bg-body-tertiary border-secondary-subtle' : (${c.kind() == 'INFO_REQUEST'} ? 'border-warning' : (${c.role() == 'EMPLOYEE'} ? 'border-primary-subtle' : ''))">
+            <div class="d-flex justify-content-between small">
+                <span>
+                    <i class="bi" th:classappend="${c.role() == 'EMPLOYEE'} ? 'bi-person' : 'bi-tools'"></i>
+                    <strong th:text="${c.author()}">tech1</strong>
+                    <span class="badge text-bg-secondary" th:if="${c.kind() == 'NOTE'}">internal note</span>
+                    <span class="badge text-bg-warning" th:if="${c.kind() == 'INFO_REQUEST'}">information requested</span>
+                </span>
+                <span class="text-body-secondary" th:text="${c.time()}">20 Nov, 10:00</span>
+            </div>
+            <div style="white-space: pre-wrap;" th:text="${c.text()}">Could you send a screenshot?</div>
+        </div>
+    </div>
+</div>
+
+<div th:fragment="stars(rating)">
+    <span class="text-warning">
+        <i th:each="n : ${#numbers.sequence(1, 5)}" class="bi" th:classappend="${n <= rating} ? 'bi-star-fill' : 'bi-star'"></i>
+    </span>
+</div>
+</body>
+</html>

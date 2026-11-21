@@ -4,6 +4,12 @@
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
 <div class="container mb-5" style="max-width: 860px;">
+    <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+    <div class="alert alert-warning" th:if="${awaitingInfo}">
+        <i class="bi bi-question-circle"></i>
+        <strong>Your technician needs more information.</strong> Please answer in the conversation below.
+    </div>
     <div class="alert alert-success" th:if="${justCreated}">
         <i class="bi bi-check-circle"></i>
         Your incident was reported. It was classified and assigned to a technician automatically.
@@ -52,6 +58,72 @@
             <dt class="col-sm-4">Expected resolution by</dt><dd class="col-sm-8" th:text="${incident.resolutionDue()}"></dd>
             <dt class="col-sm-4">Resolution</dt><dd class="col-sm-8" th:text="${incident.resolution()}"></dd>
         </dl>
+
+        <!-- the employee confirms the fix or reopens it -->
+        <div class="card border-primary mt-4" th:if="${canConfirm}">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-patch-question"></i> Is your problem fixed?</h5>
+                <p class="mb-2">
+                    Your technician's fix: <strong th:text="${incident.resolution()}">Restarted the gateway</strong>
+                </p>
+                <div class="d-flex flex-wrap gap-2 align-items-start">
+                    <form method="post" th:action="@{/employee/incidents/{id}/confirm(id=${incident.id()})}">
+                        <button type="submit" class="btn btn-success"><i class="bi bi-hand-thumbs-up"></i> Yes, it's fixed</button>
+                    </form>
+                    <button class="btn btn-outline-danger" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#reopenForm" aria-expanded="false" aria-controls="reopenForm">
+                        <i class="bi bi-arrow-counterclockwise"></i> No, still broken
+                    </button>
+                </div>
+                <form class="collapse mt-3" id="reopenForm" method="post"
+                      th:action="@{/employee/incidents/{id}/reopen(id=${incident.id()})}">
+                    <label for="reason" class="form-label">What is still wrong?</label>
+                    <textarea id="reason" name="reason" class="form-control mb-2" rows="2" maxlength="1000" required></textarea>
+                    <button type="submit" class="btn btn-danger btn-sm">Send back to the technician</button>
+                </form>
+                <div class="small text-body-secondary mt-3">
+                    <i class="bi bi-clock"></i> If you don't answer, it will be closed automatically after
+                    <span th:text="${autoCloseText}">3 days</span>.
+                </div>
+            </div>
+        </div>
+
+        <!-- feedback after resolution -->
+        <div class="card border-success-subtle mt-4" th:if="${incident.trackerStep() >= 3}">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-emoji-smile"></i> How did we do?</h5>
+                <div th:if="${feedback != null}">
+                    <div th:replace="~{fragments/conversation :: stars(${feedback.rating()})}"></div>
+                    <span class="ms-2" th:text="${feedback.comment()}">Quick fix, thanks!</span>
+                    <div class="small text-body-secondary" th:text="'Thank you! Given ' + ${feedback.time()}">Given</div>
+                </div>
+                <form th:if="${feedback == null}" method="post"
+                      th:action="@{/employee/incidents/{id}/feedback(id=${incident.id()})}">
+                    <div class="mb-2">
+                        <div class="btn-group" role="group" aria-label="Rating">
+                            <th:block th:each="n : ${#numbers.sequence(1, 5)}">
+                                <input type="radio" class="btn-check" name="rating" th:id="'rate' + ${n}" th:value="${n}"
+                                       autocomplete="off" required>
+                                <label class="btn btn-outline-warning" th:for="'rate' + ${n}" th:text="${n} + ' ★'">1 ★</label>
+                            </th:block>
+                        </div>
+                    </div>
+                    <textarea class="form-control mb-2" name="comment" rows="2" maxlength="500"
+                              placeholder="Anything to add? (optional)" aria-label="Feedback comment"></textarea>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-send"></i> Send feedback</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- conversation with the technician -->
+        <h5 class="mt-4 mb-3"><i class="bi bi-chat-dots"></i> Conversation</h5>
+        <div th:replace="~{fragments/conversation :: thread(${thread})}"></div>
+        <form th:if="${canMessage}" method="post" th:action="@{/employee/incidents/{id}/message(id=${incident.id()})}">
+            <label for="message" class="form-label small text-body-secondary"
+                   th:text="${awaitingInfo} ? 'Your answer' : 'Add information (screenshots described, error codes, when it started...)'">Add information</label>
+            <textarea id="message" name="text" class="form-control mb-2" rows="2" maxlength="1000" required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-send"></i> Send</button>
+        </form>
 
         <div th:replace="~{fragments/timeline :: timeline(${history})}"></div>
 

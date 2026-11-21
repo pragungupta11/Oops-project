@@ -31,8 +31,14 @@ public record IncidentView(String id, String description, String category, Strin
                 && s != IncidentStatus.CLOSED;
 
         String sla = "-";
-        if (p != null && open && !i.isLinked()) {   // a linked report shares its parent's SLA
-            sla = slaService.checkResolution(i.getCreatedAt(), p, LocalDateTime.now()).name();
+        if (p != null && !i.isLinked()) {   // a linked report shares its parent's SLA
+            if (open) {
+                sla = slaService.checkResolution(i.getCreatedAt(), p, LocalDateTime.now()).name();
+            } else if (i.getResolvedAt() != null) {
+                // Finished incidents keep their result: resolved in time = MET, too late = VIOLATED.
+                boolean late = i.getResolvedAt().isAfter(slaService.resolutionDeadline(i.getCreatedAt(), p));
+                sla = late ? "VIOLATED" : "MET";
+            }
         }
         String responseDue = p == null ? "-" : FORMAT.format(slaService.responseDeadline(i.getCreatedAt(), p));
         String resolutionDue = p == null ? "-" : FORMAT.format(slaService.resolutionDeadline(i.getCreatedAt(), p));
@@ -111,7 +117,7 @@ public record IncidentView(String id, String description, String category, Strin
 
     private static String slaClass(String sla) {
         return switch (sla) {
-            case "OK" -> "text-bg-success";
+            case "OK", "MET" -> "text-bg-success";
             case "AT_RISK" -> "text-bg-warning";
             case "VIOLATED" -> "text-bg-danger";
             default -> "text-bg-secondary";
