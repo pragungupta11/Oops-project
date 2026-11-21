@@ -55,6 +55,12 @@ public class IncidentNotifier implements SlaAlertListener, EscalationListener {
                             "The admin approved your re-routing request; " + id + " is now with " + techName + ".", id);
                 }
             }
+            case REASSIGNED -> {
+                send(employee, id + " has a new technician",
+                        "Your incident is now handled by " + techName + " because the previous technician is unavailable.", id);
+                send(tech, id + " assigned to you",
+                        id + " was handed over to you because its technician is unavailable: " + brief(i), id);
+            }
             case LINKED -> send(employee, id + " is part of a known issue",
                     "Our team confirmed your report is part of an issue that is already being worked on. "
                             + "You will be told as soon as it is fixed.", id);

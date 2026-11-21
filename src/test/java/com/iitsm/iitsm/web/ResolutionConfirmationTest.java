@@ -23,7 +23,7 @@ import com.iitsm.iitsm.repository.AuditLogRepository;
 
 /** The employee confirms the fix (closes it) or reopens it; unanswered ones close automatically. */
 @SpringBootTest
-@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:resolutionconfirmationtest")
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:resolutionconfirmationtest", "app.max-reports-per-hour=1000"})
 class ResolutionConfirmationTest {
 
     @Autowired IncidentWorkflowService workflow;

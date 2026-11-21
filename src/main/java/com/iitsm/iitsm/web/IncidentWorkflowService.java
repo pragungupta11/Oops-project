@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.iitsm.iitsm.audit.AuditService;
 import com.iitsm.iitsm.exception.InvalidIncidentDataException;
+import com.iitsm.iitsm.exception.TechnicianUnavailableException;
 import com.iitsm.iitsm.factory.IncidentFactory;
 import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.DuplicateMatch;
@@ -43,6 +44,7 @@ public class IncidentWorkflowService {
     private final AuditService audit;
     private final ApplicationEventPublisher events;
     private final com.iitsm.iitsm.repository.IncidentCommentRepository comments;
+    private final int maxReportsPerHour;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
@@ -52,7 +54,8 @@ public class IncidentWorkflowService {
                                    ServiceCatalog catalog,
                                    AuditService audit,
                                    ApplicationEventPublisher events,
-                                   com.iitsm.iitsm.repository.IncidentCommentRepository comments) {
+                                   com.iitsm.iitsm.repository.IncidentCommentRepository comments,
+                                   @org.springframework.beans.factory.annotation.Value("${app.max-reports-per-hour:5}") int maxReportsPerHour) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
@@ -62,6 +65,7 @@ public class IncidentWorkflowService {
         this.audit = audit;
         this.events = events;
         this.comments = comments;
+        this.maxReportsPerHour = maxReportsPerHour;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -89,6 +93,17 @@ public class IncidentWorkflowService {
         ItService service = catalog.byName(serviceName);
 
         List<Incident> existing = incidents.findAll();
+
+        // Guardrail against floods of fake reports from one account.
+        LocalDateTime hourAgo = LocalDateTime.now().minusHours(1);
+        long recent = existing.stream()
+                .filter(i -> username.equals(i.getReporterUsername()) && i.getCreatedAt().isAfter(hourAgo))
+                .count();
+        if (recent >= maxReportsPerHour) {
+            throw new InvalidIncidentDataException("You have reported " + recent + " incidents in the last hour. "
+                    + "Please add details to an existing incident, or wait a little before reporting more.");
+        }
+
         Set<String> takenIds = existing.stream().map(Incident::getId).collect(Collectors.toSet());
 
         // The factory's id counter restarts at 1000 on every app start, so skip ids already
@@ -323,6 +338,84 @@ public class IncidentWorkflowService {
             throw new InvalidIncidentDataException("Only a resolved incident can be confirmed or reopened");
         }
         return incident;
+    }
+
+    // ------------------------------------------------------------ technician unavailable / deactivated
+
+    /** Result of handing over a technician's open incidents. */
+    public record HandoverResult(int moved, List<String> notMoved) {}
+
+    /**
+     * Hands over every open incident of a technician who is unavailable or deactivated to other
+     * available technicians with the right skill (active assignment strategy). Incidents nobody
+     * else can take stay where they are and are reported back to the admin.
+     */
+    @Transactional
+    public HandoverResult reassignOpenIncidentsOf(String technicianId) {
+        int moved = 0;
+        List<String> notMoved = new java.util.ArrayList<>();
+        for (Incident incident : incidents.findAll()) {
+            Technician current = incident.getAssignedTechnician();
+            if (current == null || !current.getId().equals(technicianId)
+                    || incident.isLinked() || incident.isFinished()) {
+                continue;
+            }
+            List<Technician> others = technicians.findAll().stream()
+                    .filter(t -> !t.getId().equals(technicianId))
+                    .toList();
+            Technician next;
+            try {
+                next = processing.getAssignmentStrategy().pick(incident.getCategory(), others);
+            } catch (TechnicianUnavailableException e) {
+                notMoved.add(incident.getId());
+                continue;
+            }
+            moveTo(incident, next, "automatic, matching skill");
+            moved++;
+        }
+        return new HandoverResult(moved, notMoved);
+    }
+
+    /**
+     * Admin hands one open incident to a technician of their choice, e.g. when nobody else has
+     * the skill. The target must be available.
+     */
+    @Transactional
+    public Incident handOver(String incidentId, String toTechnicianId) {
+        Incident incident = incidents.findById(incidentId);
+        if (incident.isLinked() || incident.isFinished()) {
+            throw new InvalidIncidentDataException("Only open, non-linked incidents can be handed over");
+        }
+        Technician target = technicians.findById(toTechnicianId);
+        if (!target.isAvailable()) {
+            throw new InvalidIncidentDataException(target.getName() + " is not available");
+        }
+        if (incident.getAssignedTechnician() != null && incident.getAssignedTechnician().getId().equals(toTechnicianId)) {
+            throw new InvalidIncidentDataException("The incident is already with " + target.getName());
+        }
+        return moveTo(incident, target, "chosen by admin");
+    }
+
+    /** Moves an open incident to another technician: workloads, status, audit and notifications. */
+    private Incident moveTo(Incident incident, Technician next, String how) {
+        Technician previous = incident.getAssignedTechnician();
+        next.incrementActiveIncidents();
+        technicians.save(next);
+        if (previous != null) {
+            Technician old = technicians.findById(previous.getId());
+            old.decrementActiveIncidents();
+            technicians.save(old);
+        }
+        incident.setAssignedTechnician(next);
+        if (incident.getStatus() == IncidentStatus.ACKNOWLEDGED || incident.getStatus() == IncidentStatus.IN_PROGRESS) {
+            incident.transitionTo(IncidentStatus.ASSIGNED);   // the new technician must acknowledge it
+        }
+        Incident saved = saveAndCascade(incident);
+        audit.record("INCIDENT_REASSIGNED", "INCIDENT", incident.getId(), "Handed over from "
+                + (previous == null ? "-" : previous.getId()) + " to " + next.getId() + " (" + how + ")");
+        events.publishEvent(new IncidentEvent(IncidentEventType.REASSIGNED, saved,
+                previous == null ? null : previous.getId()));
+        return saved;
     }
 
     // ------------------------------------------------------------ re-routing (reassignment)

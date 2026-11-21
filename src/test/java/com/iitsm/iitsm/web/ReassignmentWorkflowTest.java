@@ -18,7 +18,7 @@ import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.repository.AuditLogRepository;
 
 @SpringBootTest
-@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:reassignmenttest")
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:reassignmenttest", "app.max-reports-per-hour=1000"})
 class ReassignmentWorkflowTest {
 
     @Autowired IncidentWorkflowService workflow;

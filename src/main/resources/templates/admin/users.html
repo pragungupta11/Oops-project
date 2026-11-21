@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Users')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container-fluid px-4 mb-5">
+    <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-people"></i> Users &amp; technicians</h2>
+            <div class="small text-body-secondary">Employees can also sign up themselves. Technicians and admins are created here only.</div>
+        </div>
+        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#addUser"
+                aria-expanded="false" aria-controls="addUser"><i class="bi bi-person-plus"></i> Add user</button>
+    </div>
+
+    <!-- add user -->
+    <div class="collapse mb-4" id="addUser">
+        <div class="page">
+            <form method="post" th:action="@{/admin/users}" class="row g-3">
+                <div class="col-md-3"><label class="form-label" for="nName">Full name</label>
+                    <input id="nName" class="form-control" name="fullName" required maxlength="100"></div>
+                <div class="col-md-2"><label class="form-label" for="nUser">Username</label>
+                    <input id="nUser" class="form-control" name="username" required pattern="[a-z0-9._]{3,30}"></div>
+                <div class="col-md-3"><label class="form-label" for="nMail">E-mail (optional)</label>
+                    <input id="nMail" class="form-control" type="email" name="email"></div>
+                <div class="col-md-2"><label class="form-label" for="nPass">Temporary password</label>
+                    <input id="nPass" class="form-control" type="text" name="password" required minlength="8"
+                           placeholder="8+ chars, letter + digit"></div>
+                <div class="col-md-2"><label class="form-label" for="nRole">Role</label>
+                    <select id="nRole" class="form-select" name="role">
+                        <option value="EMPLOYEE">Employee</option>
+                        <option value="TECHNICIAN" selected>Technician</option>
+                        <option value="ADMIN">Admin</option>
+                    </select></div>
+                <div class="col-12" id="skillBox">
+                    <span class="form-label d-block">Skills (technicians: at least one)</span>
+                    <div class="form-check form-check-inline" th:each="c : ${categories}">
+                        <input class="form-check-input" type="checkbox" name="skills" th:value="${c.label()}" th:id="'new-' + ${c.name()}">
+                        <label class="form-check-label" th:for="'new-' + ${c.name()}" th:text="${c.label()}">Network</label>
+                    </div>
+                </div>
+                <div class="col-12"><button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Create account</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="page border border-warning mb-4" th:unless="${#lists.isEmpty(stuck)}">
+        <h5 class="mb-1"><i class="bi bi-exclamation-triangle text-warning"></i> Waiting for a new technician</h5>
+        <p class="small text-body-secondary">
+            These open incidents belong to a technician who is unavailable or deactivated. Choose who takes over
+            (tip: if nobody has the skill, add it to someone first, or hand it to the closest match).
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Incident</th><th>Category</th><th>Current technician</th><th>Hand over to</th></tr></thead>
+                <tbody>
+                <tr th:each="x : ${stuck}">
+                    <td><strong th:text="${x.id()}">INC1001</strong>
+                        <div class="small text-body-secondary text-truncate" style="max-width: 320px;" th:text="${x.description()}">desc</div></td>
+                    <td th:text="${x.category()}">Application</td>
+                    <td th:text="${x.technicianName()}">Meera</td>
+                    <td>
+                        <form method="post" class="d-flex gap-2" th:action="@{/admin/incidents/{id}/handover(id=${x.id()})}">
+                            <select name="technicianId" class="form-select form-select-sm" aria-label="New technician">
+                                <option th:each="t : ${availableTechs}" th:value="${t.getId()}"
+                                        th:text="${t.getName()} + ' (' + ${#strings.setJoin(t.getSkills(), ', ')} + '; ' + ${t.getActiveIncidents()} + ' active)'"></option>
+                            </select>
+                            <button type="submit" class="btn btn-warning btn-sm">Move</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <ul class="nav nav-pills mb-3">
+        <li class="nav-item"><a class="nav-link" th:classappend="${roleFilter == ''} ? 'active' : ''" th:href="@{/admin/users}">
+            All <span class="badge text-bg-secondary" th:text="${counts.get('ALL')}">8</span></a></li>
+        <li class="nav-item"><a class="nav-link" th:classappend="${roleFilter == 'ADMIN'} ? 'active' : ''" th:href="@{/admin/users(role='ADMIN')}">
+            <i class="bi bi-shield-lock"></i> Admins <span class="badge text-bg-secondary" th:text="${counts.get('ADMIN')}">1</span></a></li>
+        <li class="nav-item"><a class="nav-link" th:classappend="${roleFilter == 'EMPLOYEE'} ? 'active' : ''" th:href="@{/admin/users(role='EMPLOYEE')}">
+            <i class="bi bi-person"></i> Employees <span class="badge text-bg-secondary" th:text="${counts.get('EMPLOYEE')}">4</span></a></li>
+        <li class="nav-item"><a class="nav-link" th:classappend="${roleFilter == 'TECHNICIAN'} ? 'active' : ''" th:href="@{/admin/users(role='TECHNICIAN')}">
+            <i class="bi bi-tools"></i> Technicians <span class="badge text-bg-secondary" th:text="${counts.get('TECHNICIAN')}">3</span></a></li>
+    </ul>
+
+    <div class="page p-2 table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Technician skills</th><th>Workload</th><th>Actions</th></tr></thead>
+            <tbody>
+            <tr th:if="${#lists.isEmpty(rows)}"><td colspan="6" class="text-body-secondary">No users in this group.</td></tr>
+            <tr th:each="u : ${rows}" th:classappend="${!u.enabled()} ? 'opacity-50' : ''">
+                <td>
+                    <strong th:text="${u.fullName()}">Meera Iyer</strong>
+                    <div class="small text-body-secondary" th:text="${u.username()} + ' · ' + ${u.email()} + ' · since ' + ${u.created()}">tech2</div>
+                </td>
+                <td><span class="badge text-bg-secondary" th:text="${u.role()}">TECHNICIAN</span></td>
+                <td>
+                    <span class="badge text-bg-success" th:if="${u.enabled()}">Active</span>
+                    <span class="badge text-bg-danger" th:unless="${u.enabled()}">Deactivated</span>
+                    <span class="badge text-bg-warning" th:if="${u.technician() and u.enabled() and !u.available()}">Unavailable</span>
+                </td>
+                <td>
+                    <form th:if="${u.technician()}" method="post" class="d-flex flex-wrap align-items-center gap-2"
+                          th:action="@{/admin/technicians/{id}/skills(id=${u.username()})}">
+                        <span class="form-check form-check-inline m-0" th:each="c : ${categories}">
+                            <input class="form-check-input" type="checkbox" name="skills" th:value="${c.label()}"
+                                   th:id="${u.username()} + '-' + ${c.name()}" th:checked="${u.skills().contains(c.label())}">
+                            <label class="form-check-label small" th:for="${u.username()} + '-' + ${c.name()}" th:text="${c.label()}">Network</label>
+                        </span>
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Save skills</button>
+                    </form>
+                </td>
+                <td>
+                    <span th:if="${u.technician()}" th:text="${u.active()} + ' active'">2 active</span>
+                    <form th:if="${u.technician() and !u.available() and u.active() > 0}" method="post" class="mt-1"
+                          th:action="@{/admin/technicians/{id}/reassign-open(id=${u.username()})}">
+                        <button type="submit" class="btn btn-warning btn-sm"
+                                th:text="'Reassign ' + ${u.active()} + ' open incident(s)'">Reassign</button>
+                    </form>
+                </td>
+                <td class="text-nowrap">
+                    <form th:if="${u.technician() and u.enabled()}" method="post" class="d-inline"
+                          th:action="@{/admin/technicians/{id}/availability(id=${u.username()})}">
+                        <input type="hidden" name="available" th:value="${!u.available()}">
+                        <button type="submit" class="btn btn-sm"
+                                th:classappend="${u.available()} ? 'btn-outline-warning' : 'btn-outline-success'"
+                                th:text="${u.available()} ? 'Set unavailable' : 'Set available'">Set unavailable</button>
+                    </form>
+                    <form th:if="${u.enabled()}" method="post" class="d-inline"
+                          th:action="@{/admin/users/{u}/enabled(u=${u.username()})}"
+                          onsubmit="return confirm('Deactivate this account? They will not be able to sign in. A technician\'s open incidents are handed over to others.');">
+                        <input type="hidden" name="enabled" value="false">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Deactivate</button>
+                    </form>
+                    <form th:unless="${u.enabled()}" method="post" class="d-inline"
+                          th:action="@{/admin/users/{u}/enabled(u=${u.username()})}">
+                        <input type="hidden" name="enabled" value="true">
+                        <button type="submit" class="btn btn-sm btn-outline-success">Reactivate</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    // only show the skill checkboxes when "Technician" is chosen
+    (function () {
+        const role = document.getElementById('nRole'), box = document.getElementById('skillBox');
+        function sync() { box.style.display = role.value === 'TECHNICIAN' ? '' : 'none'; }
+        role.addEventListener('change', sync); sync();
+    })();
+</script>
+</body>
+</html>

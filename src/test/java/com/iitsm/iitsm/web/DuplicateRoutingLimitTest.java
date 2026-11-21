@@ -15,7 +15,7 @@ import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 
 /** Own database, because it deliberately overloads a technician. */
 @SpringBootTest
-@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:duplicateroutinglimittest")
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:duplicateroutinglimittest", "app.max-reports-per-hour=1000"})
 class DuplicateRoutingLimitTest {
 
     @Autowired IncidentWorkflowService workflow;

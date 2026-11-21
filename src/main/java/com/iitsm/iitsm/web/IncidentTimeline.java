@@ -90,6 +90,9 @@ public class IncidentTimeline {
                 case "INCIDENT_REOPENED" -> entries.add(new Entry(time,
                         staffView ? "Reopened by the employee" : "Reopened: you reported it is still not fixed",
                         staffView ? details : "", "arrow-counterclockwise", "danger"));
+                case "INCIDENT_REASSIGNED" -> entries.add(new Entry(time,
+                        staffView ? "Handed over to another technician" : "Your incident has a new technician",
+                        staffView ? details : "", "arrow-left-right", "warning"));
                 case "CLOSED_BY_ADMIN" -> entries.add(new Entry(time, "Closed by an administrator",
                         staffView ? details : "", "shield-check", "dark"));
                 case "AUTO_CLOSED" -> entries.add(new Entry(time, "Closed automatically",

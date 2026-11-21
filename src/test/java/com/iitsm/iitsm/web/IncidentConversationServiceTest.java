@@ -17,7 +17,7 @@ import com.iitsm.iitsm.model.CommentKind;
 import com.iitsm.iitsm.model.Incident;
 
 @SpringBootTest
-@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:conversationtest")
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:conversationtest", "app.max-reports-per-hour=1000"})
 class IncidentConversationServiceTest {
 
     @Autowired IncidentWorkflowService workflow;

@@ -23,6 +23,7 @@ public class AppUserDetailsService implements UserDetailsService {
         return User.withUsername(account.getUsername())
                 .password(account.getPassword())
                 .roles(account.getRole())
+                .disabled(!account.isEnabled())   // deactivated accounts cannot log in
                 .build();
     }
 }
