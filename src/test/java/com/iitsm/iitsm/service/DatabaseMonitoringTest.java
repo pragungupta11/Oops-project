@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,7 @@ class DatabaseMonitoringTest {
     @Autowired SlaMonitorJob job;
     @Autowired IncidentPersistenceService incidents;
     @Autowired AuditLogRepository auditLogs;
+    @Autowired SlaService slaService;
 
     @Test
     void overdueCriticalIncidentIsEscalatedSavedAndAudited() {
@@ -43,5 +45,27 @@ class DatabaseMonitoringTest {
         assertTrue(auditLogs.findAll().stream()
                 .anyMatch(a -> a.getAction().equals("SLA_VIOLATED")
                         && a.getEntityId().equals("TEST-ESC-1")));
+    }
+
+    @Test
+    void alertsAreNotRepeatedAfterARestart() {
+        Incident incident = new Incident("TEST-RESTART-1", "Payroll export down", "Application",
+                3, 3, 3, LocalDateTime.now().minusMinutes(40));
+        incident.setPriority(Priority.P1);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incidents.save(incident);
+        job.run();                                    // reports response + resolution violations once
+
+        // A brand-new monitor has an empty memory, like after restarting the app.
+        SlaMonitor afterRestart = new SlaMonitor(slaService, List.of());
+        assertTrue(afterRestart.scan(List.of(incidents.findById("TEST-RESTART-1")), LocalDateTime.now()).isEmpty());
+
+        long violations = auditLogs.findAll().stream()
+                .filter(a -> a.getAction().equals("SLA_VIOLATED") && a.getEntityId().equals("TEST-RESTART-1"))
+                .count();
+        job.run();                                    // a second run must not add more
+        assertEquals(violations, auditLogs.findAll().stream()
+                .filter(a -> a.getAction().equals("SLA_VIOLATED") && a.getEntityId().equals("TEST-RESTART-1"))
+                .count());
     }
 }

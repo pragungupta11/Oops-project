@@ -3,87 +3,201 @@
 <head th:replace="~{fragments/layout :: head('Dashboard')}"></head>
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
-<div class="container">
-    <h2 class="mb-3">Dashboard</h2>
+<div class="container mb-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-speedometer2"></i> Dashboard</h2>
+            <div class="small text-body-secondary">
+                <span class="badge text-bg-success"><i class="bi bi-broadcast"></i> Live</span>
+                updated <span th:text="${refreshedAt}">10:00:00</span> · refreshes every 30 s
+            </div>
+        </div>
+    </div>
     <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
     <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
 
+    <!-- headline numbers -->
     <div class="row g-3 mb-4">
-        <div class="col">
-            <div class="card text-center"><div class="card-body">
-                <div class="fs-2" th:text="${total}">0</div><div class="text-muted small">Total incidents</div>
-            </div></div>
+        <div class="col-6 col-md">
+            <div class="card stat-card h-100"><div class="card-body d-flex justify-content-between">
+                <div><div class="fs-2 fw-semibold" th:text="${total}">0</div><div class="text-body-secondary small">Total incidents</div></div>
+                <i class="bi bi-collection stat-icon text-primary"></i></div></div>
         </div>
-        <div class="col">
-            <div class="card text-center"><div class="card-body">
-                <div class="fs-2" th:text="${open}">0</div><div class="text-muted small">Open</div>
-            </div></div>
+        <div class="col-6 col-md">
+            <div class="card stat-card h-100"><div class="card-body d-flex justify-content-between">
+                <div><div class="fs-2 fw-semibold" th:text="${open}">0</div><div class="text-body-secondary small">Open</div></div>
+                <i class="bi bi-hourglass-split stat-icon text-info"></i></div></div>
         </div>
-        <div class="col">
-            <div class="card text-center border-warning"><div class="card-body">
-                <div class="fs-2" th:text="${atRisk}">0</div><div class="text-muted small">SLA at risk</div>
-            </div></div>
+        <div class="col-6 col-md">
+            <div class="card stat-card h-100"><div class="card-body d-flex justify-content-between">
+                <div><div class="fs-2 fw-semibold text-warning" th:text="${atRisk}">0</div><div class="text-body-secondary small">SLA at risk</div></div>
+                <i class="bi bi-exclamation-triangle stat-icon text-warning"></i></div></div>
         </div>
-        <div class="col">
-            <div class="card text-center border-danger"><div class="card-body">
-                <div class="fs-2" th:text="${violated}">0</div><div class="text-muted small">SLA violated</div>
-            </div></div>
+        <div class="col-6 col-md">
+            <div class="card stat-card h-100"><div class="card-body d-flex justify-content-between">
+                <div><div class="fs-2 fw-semibold text-danger" th:text="${violated}">0</div><div class="text-body-secondary small">SLA violated</div></div>
+                <i class="bi bi-exclamation-octagon stat-icon text-danger"></i></div></div>
         </div>
-        <div class="col">
-            <div class="card text-center border-success"><div class="card-body">
-                <div class="fs-2" th:text="${awaitingVerify}">0</div><div class="text-muted small">Awaiting verification</div>
-            </div></div>
+        <div class="col-12 col-md">
+            <div class="card stat-card h-100"><div class="card-body d-flex justify-content-between">
+                <div><div class="fs-2 fw-semibold text-success" th:text="${awaitingVerify}">0</div><div class="text-body-secondary small">Awaiting verification</div></div>
+                <i class="bi bi-patch-check stat-icon text-success"></i></div></div>
         </div>
     </div>
 
     <div class="row g-4 mb-4">
-        <div class="col-md-6">
-            <h5>By status</h5>
-            <div class="mb-2" th:each="b : ${byStatus}">
-                <div class="d-flex justify-content-between small">
-                    <span th:text="${b.label()}">ASSIGNED</span><span th:text="${b.count()}">0</span>
-                </div>
-                <div class="progress" style="height: 10px;">
-                    <div class="progress-bar" th:style="'width: ' + ${b.percent()} + '%'"></div>
+        <!-- needs attention -->
+        <div class="col-lg-5">
+            <div class="page h-100">
+                <h5 class="mb-3"><i class="bi bi-bell-fill text-danger"></i> Needs attention</h5>
+                <p class="text-body-secondary" th:if="${#lists.isEmpty(attention)}">
+                    <i class="bi bi-emoji-sunglasses"></i> All clear: nothing is overdue, escalated or waiting.
+                </p>
+                <div class="list-group list-group-flush">
+                    <a class="list-group-item list-group-item-action px-0" th:each="a : ${attention}"
+                       th:href="@{/admin/incidents(keyword=${a.id()})}">
+                        <div class="d-flex justify-content-between">
+                            <strong th:text="${a.id()}">INC1001</strong>
+                            <span>
+                                <span class="badge text-bg-danger" th:if="${a.sla() == 'VIOLATED'}">SLA violated</span>
+                                <span class="badge text-bg-warning" th:if="${a.sla() == 'AT_RISK'}">SLA at risk</span>
+                                <span class="badge text-bg-danger" th:if="${a.open() and !#strings.isEmpty(a.escalation())}"
+                                      th:text="'Escalated: ' + ${@labels.escalation(a.escalation())}">Escalated</span>
+                                <span class="badge text-bg-success" th:if="${a.status() == 'RESOLVED'}">Verify &amp; close</span>
+                            </span>
+                        </div>
+                        <div class="small text-truncate text-body-secondary" th:text="${a.description()}">Payment app down</div>
+                    </a>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <h5>By priority</h5>
-            <div class="mb-2" th:each="b : ${byPriority}">
-                <div class="d-flex justify-content-between small">
-                    <span th:text="${b.label()}">P1</span><span th:text="${b.count()}">0</span>
+        <!-- charts -->
+        <div class="col-lg-7">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="page h-100">
+                        <h6 class="mb-3">By status</h6>
+                        <canvas id="statusChart" height="220"></canvas>
+                    </div>
                 </div>
-                <div class="progress" style="height: 10px;">
-                    <div class="progress-bar bg-danger" th:style="'width: ' + ${b.percent()} + '%'"></div>
+                <div class="col-md-6">
+                    <div class="page h-100">
+                        <h6 class="mb-3">By category</h6>
+                        <div style="position: relative; height: 220px;"><canvas id="categoryChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="page">
+                        <h6 class="mb-3">By priority</h6>
+                        <div class="mb-2" th:each="b : ${byPriority}">
+                            <div class="d-flex justify-content-between small">
+                                <span th:text="${b.label()}">P1</span><span th:text="${b.count()}">0</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar" th:classappend="${b.label() == 'P1'} ? 'bg-danger' : (${b.label() == 'P2'} ? 'bg-warning' : 'bg-primary')"
+                                     th:style="'width: ' + ${b.percent()} + '%'"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <h5>Technician workload</h5>
-    <table class="table table-sm align-middle mb-4">
-        <thead><tr><th>Technician</th><th>Skills</th><th>Active incidents</th><th>Available</th></tr></thead>
-        <tbody>
-        <tr th:each="t : ${techs}">
-            <td th:text="${t.name()}">Ravi Kumar</td>
-            <td th:text="${t.skills()}">Network</td>
-            <td th:text="${t.active()}">0</td>
-            <td th:text="${t.available()}">Yes</td>
-        </tr>
-        </tbody>
-    </table>
-
-    <h5>Assignment strategy</h5>
-    <p class="text-muted">Currently: <strong th:text="${activeStrategy}">default</strong></p>
-    <form class="row g-2 mb-5" method="post" th:action="@{/admin/strategy}">
-        <div class="col-auto">
-            <select class="form-select" name="name">
-                <option th:each="n : ${strategyNames}" th:value="${n}" th:text="${n}"></option>
-            </select>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="page h-100">
+                <h5 class="mb-3"><i class="bi bi-people"></i> Technician workload</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Technician</th><th>Skills</th><th style="width: 35%;">Active incidents</th><th>Available</th></tr></thead>
+                        <tbody>
+                        <tr th:each="t : ${techs}">
+                            <td th:text="${t.name()}">Ravi Kumar</td>
+                            <td class="small" th:text="${t.skills()}">Network</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 8px;">
+                                        <div class="progress-bar" th:classappend="${t.active() >= 5} ? 'bg-danger' : (${t.active() >= 3} ? 'bg-warning' : 'bg-success')"
+                                             th:style="'width: ' + ${t.active() * 20 > 100 ? 100 : t.active() * 20} + '%'"></div>
+                                    </div>
+                                    <span th:text="${t.active()}">0</span>
+                                </div>
+                            </td>
+                            <td><i class="bi" th:classappend="${t.available() == 'Yes'} ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger'"></i></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div class="col-auto"><button type="submit" class="btn btn-primary">Switch</button></div>
-    </form>
+        <div class="col-lg-4">
+            <div class="page h-100">
+                <h5 class="mb-1"><i class="bi bi-shuffle"></i> Assignment strategy</h5>
+                <p class="text-body-secondary small">How new incidents are given to technicians. Changes are saved and audited.</p>
+                <p class="mb-2">Currently: <span class="badge text-bg-primary fs-6" th:text="${@labels.strategy(activeStrategy)}">Skill-based</span></p>
+                <form class="d-flex gap-2" method="post" th:action="@{/admin/strategy}">
+                    <select class="form-select" name="name" id="strategySelect">
+                        <option th:each="n : ${strategyNames}" th:value="${n}" th:text="${@labels.strategy(n)}"
+                                th:selected="${n == activeStrategy}"></option>
+                    </select>
+                    <button type="submit" class="btn btn-primary">Switch</button>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script th:inline="javascript">
+    (function () {
+        const statusLabels = /*[[${statusLabels}]]*/ [];
+        const statusCounts = /*[[${statusCounts}]]*/ [];
+        const categoryLabels = /*[[${categoryLabels}]]*/ [];
+        const categoryCounts = /*[[${categoryCounts}]]*/ [];
+        const palette = ['#4f46e5', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#64748b'];
+        let charts = [];
+
+        function textColour() {
+            return document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#cbd5e1' : '#334155';
+        }
+        function gridColour() {
+            return document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+        }
+        function draw() {
+            if (typeof Chart === 'undefined') return;   // offline: charts are optional
+            charts.forEach(c => c.destroy());
+            Chart.defaults.color = textColour();
+            // hide statuses with zero incidents so the donut stays readable
+            const keep = statusCounts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
+            charts = [
+                new Chart(document.getElementById('statusChart'), {
+                    type: 'doughnut',
+                    data: { labels: keep.map(i => statusLabels[i]),
+                            datasets: [{ data: keep.map(i => statusCounts[i]), backgroundColor: palette, borderWidth: 0 }] },
+                    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } }, cutout: '62%' }
+                }),
+                new Chart(document.getElementById('categoryChart'), {
+                    type: 'bar',
+                    data: { labels: categoryLabels,
+                            datasets: [{ data: categoryCounts, backgroundColor: categoryLabels.map((_, i) => palette[i % palette.length]),
+                                         borderRadius: 4, barThickness: 14 }] },
+                    options: { indexAxis: 'y', maintainAspectRatio: false,
+                               plugins: { legend: { display: false } },
+                               scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: gridColour() } },
+                                         y: { grid: { display: false } } } }
+                })
+            ];
+        }
+        draw();
+        window.addEventListener('themechange', draw);
+
+        // Live dashboard: reload every 30 s, but never while the admin is choosing a strategy.
+        setInterval(() => {
+            if (document.activeElement && document.activeElement.id === 'strategySelect') return;
+            window.location.reload();
+        }, 30000);
+    })();
+</script>
 </body>
 </html>

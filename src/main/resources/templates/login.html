@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Sign in')}"></head>
+<body>
+<style>
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+                  background: radial-gradient(circle at 20% 20%, rgba(79,70,229,.25), transparent 45%),
+                              radial-gradient(circle at 80% 80%, rgba(14,165,233,.25), transparent 45%),
+                              var(--bs-tertiary-bg); }
+    .login-card { width: 100%; max-width: 420px; border: 0; border-radius: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+    .login-logo { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+                  background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-size: 1.8rem; }
+</style>
+<div class="login-wrap px-3">
+    <button type="button" class="btn btn-sm btn-outline-secondary theme-toggle position-absolute top-0 end-0 m-3"
+            title="Switch light/dark mode" onclick="toggleTheme()"><i class="bi bi-moon-stars"></i></button>
+
+    <div class="card login-card">
+        <div class="card-body p-4 p-md-5">
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <div class="login-logo"><i class="bi bi-lightning-charge-fill"></i></div>
+                <div>
+                    <h1 class="h4 mb-0" th:text="${brand}">IncidentIQ</h1>
+                    <div class="text-body-secondary small" th:text="${tagline}">Smarter incident resolution</div>
+                </div>
+            </div>
+
+            <div class="alert alert-danger py-2" th:if="${param.error}">
+                <i class="bi bi-exclamation-triangle"></i> Wrong username or password.
+            </div>
+            <div class="alert alert-success py-2" th:if="${param.logout}">
+                <i class="bi bi-check-circle"></i> You have been signed out.
+            </div>
+
+            <form th:action="@{/login}" method="post">
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" id="username" name="username" placeholder="Username"
+                           autocomplete="username" required autofocus>
+                    <label for="username">Username</label>
+                </div>
+                <div class="form-floating mb-3">
+                    <input type="password" class="form-control" id="password" name="password" placeholder="Password"
+                           autocomplete="current-password" required>
+                    <label for="password">Password</label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2">
+                    <i class="bi bi-box-arrow-in-right"></i> Sign in
+                </button>
+            </form>
+
+            <details class="mt-4 small">
+                <summary class="text-body-secondary">Demo accounts</summary>
+                <table class="table table-sm mt-2 mb-0">
+                    <tr><td>Employee</td><td><code>employee1</code> / <code>Demo@1234</code></td></tr>
+                    <tr><td>Technician</td><td><code>tech1</code>, <code>tech2</code>, <code>tech3</code> / <code>Demo@1234</code></td></tr>
+                    <tr><td>Admin</td><td><code>admin</code> / <code>ChangeMe123!</code></td></tr>
+                </table>
+            </details>
+        </div>
+    </div>
+</div>
+<script>
+    function toggleTheme() {
+        const next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-bs-theme', next);
+        try { localStorage.setItem('theme', next); } catch (e) { }
+        document.querySelector('.theme-toggle i').className = next === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+    }
+    document.querySelector('.theme-toggle i').className =
+        document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+</script>
+</body>
+</html>

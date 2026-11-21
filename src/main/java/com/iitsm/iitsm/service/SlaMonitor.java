@@ -2,9 +2,7 @@ package com.iitsm.iitsm.service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
@@ -19,7 +17,6 @@ import com.iitsm.iitsm.observer.SlaAlertListener;
 public class SlaMonitor {
     private final SlaService slaService;
     private final List<SlaAlertListener> listeners;
-    private final Map<String, SlaStatus> lastReported = new HashMap<>();
 
     public SlaMonitor(SlaService slaService, List<SlaAlertListener> listeners) {
         this.slaService = slaService;
@@ -55,11 +52,12 @@ public class SlaMonitor {
 
     private void report(Incident incident, AlertType type, SlaStatus status,
                         LocalDateTime now, List<SlaAlert> raised) {
-        String key = incident.getId() + ":" + type;
-        SlaStatus previous = lastReported.getOrDefault(key, SlaStatus.OK);
+        // Remembered on the incident itself (and saved by the job), so a restart does not
+        // make the monitor forget and repeat the same alert.
+        SlaStatus previous = incident.getReportedSla(type);
         if (status == previous) return;
 
-        lastReported.put(key, status);
+        incident.setReportedSla(type, status);
         if (status != SlaStatus.OK) {
             SlaAlert alert = new SlaAlert(incident.getId(), type, status, now);
             raised.add(alert);

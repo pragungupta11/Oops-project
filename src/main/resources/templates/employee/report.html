@@ -3,8 +3,10 @@
 <head th:replace="~{fragments/layout :: head('Report incident')}"></head>
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
-<div class="container" style="max-width: 720px;">
-    <h2 class="mb-3">Report an incident</h2>
+<div class="container mb-5" style="max-width: 760px;">
+  <div class="page">
+    <h2 class="mb-1"><i class="bi bi-plus-circle"></i> Report an incident</h2>
+    <p class="text-body-secondary">Describe what went wrong. We suggest a category as you type.</p>
     <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
 
     <form th:action="@{/employee/report}" method="post">
@@ -51,9 +53,10 @@
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Submit incident</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Submit incident</button>
         <a class="btn btn-link" th:href="@{/employee/incidents}">Cancel</a>
     </form>
+  </div>
 </div>
 <script th:inline="javascript">
     // Suggest a category while the employee types. It only pre-selects the box; the
@@ -78,7 +81,7 @@
                     if (response.status !== 200) { hint.textContent = ''; return; }
                     const s = await response.json();
                     if (!chosenByUser) category.value = s.category;
-                    hint.textContent = 'Suggested: ' + s.label + ' (by ' + s.source + '; ' + s.reason + ')'
+                    hint.textContent = '\u2728 Suggested: ' + s.label + ' (by ' + s.source + '; ' + s.reason + ')'
                         + (chosenByUser && category.value !== s.category ? ' - you chose differently, that is fine.' : '');
                 } catch (e) {
                     hint.textContent = '';   // suggestions are optional; never block the form

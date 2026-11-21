@@ -40,6 +40,11 @@ public class Incident {
     private static final Set<IncidentStatus> FINISHED = EnumSet.of(
             IncidentStatus.RESOLVED, IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
     private String parentId;
+
+    // What the SLA monitor last reported for each clock, so it never repeats an alert,
+    // even after a restart (stored in the database).
+    private SlaStatus reportedResponseSla = SlaStatus.OK;
+    private SlaStatus reportedResolutionSla = SlaStatus.OK;
     private String suggestedParentId;
     private Integer suggestedMatchPercent;
 
@@ -241,5 +246,17 @@ public class Incident {
         this.parentId = parentId;
         this.suggestedParentId = suggestedParentId;
         this.suggestedMatchPercent = matchPercent;
+    }
+
+    // ------------------------------------------------------------ SLA alert memory
+
+    public SlaStatus getReportedSla(AlertType type) {
+        return type == AlertType.RESPONSE ? reportedResponseSla : reportedResolutionSla;
+    }
+
+    public void setReportedSla(AlertType type, SlaStatus status) {
+        SlaStatus value = status == null ? SlaStatus.OK : status;
+        if (type == AlertType.RESPONSE) reportedResponseSla = value;
+        else reportedResolutionSla = value;
     }
 }

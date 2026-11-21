@@ -29,12 +29,15 @@ public class TechnicianController {
     private final IncidentWorkflowService workflow;
     private final IncidentPersistenceService incidents;
     private final SlaService slaService;
+    private final IncidentTimeline timeline;
 
     public TechnicianController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
-                                SlaService slaService) {
+                                SlaService slaService,
+                                IncidentTimeline timeline) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.slaService = slaService;
+        this.timeline = timeline;
     }
 
     /** The suspected original incident, shown next to the "Link" / "Not the same" buttons. */
@@ -45,8 +48,9 @@ public class TechnicianController {
         String me = authentication.getName();
         List<IncidentView> rows = incidents.findAll().stream()
                 .filter(i -> i.getAssignedTechnician() != null && me.equals(i.getAssignedTechnician().getId()))
-                .sorted(Comparator.comparing(Incident::getCreatedAt).reversed())
                 .map(i -> IncidentView.of(i, slaService))
+                .sorted(Comparator.comparing((IncidentView v) -> !v.open())
+                        .thenComparing(IncidentView::resolutionDueIso))
                 .toList();
         model.addAttribute("rows", rows);
         return "technician/incidents";
@@ -61,6 +65,17 @@ public class TechnicianController {
         }
         model.addAttribute("incident", IncidentView.of(incident, slaService));
         model.addAttribute("categories", Category.values());
+        model.addAttribute("history", timeline.forIncident(incident.getId(), true));
+
+        // Acknowledging late is allowed (work must continue), but the technician should know.
+        long minutesLate = 0;
+        if (incident.getAcknowledgedAt() == null && incident.getPriority() != null) {
+            java.time.LocalDateTime due = slaService.responseDeadline(incident.getCreatedAt(), incident.getPriority());
+            if (java.time.LocalDateTime.now().isAfter(due)) {
+                minutesLate = Math.max(1, java.time.Duration.between(due, java.time.LocalDateTime.now()).toMinutes());
+            }
+        }
+        model.addAttribute("responseMinutesLate", minutesLate);
         model.addAttribute("pendingCategory", incident.getRequestedCategory());
         model.addAttribute("pendingReason", incident.getReassignmentReason());
 

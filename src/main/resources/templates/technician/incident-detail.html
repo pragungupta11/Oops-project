@@ -3,15 +3,20 @@
 <head th:replace="~{fragments/layout :: head('Incident')}"></head>
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
-<div class="container" style="max-width: 800px;">
+<div class="container mb-5" style="max-width: 860px;">
     <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
     <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
 
-    <h2 class="mb-3">
-        <span th:text="${incident.id()}">INC1001</span>
+  <div class="page mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <h2 class="mb-0 me-2" th:text="${incident.id()}">INC1001</h2>
         <span class="badge fs-6" th:classappend="${incident.priorityClass()}" th:text="${incident.priority()}">P2</span>
-        <span class="badge fs-6" th:classappend="${incident.statusClass()}" th:text="${incident.status()}">ASSIGNED</span>
-    </h2>
+        <span class="badge fs-6" th:classappend="${incident.statusClass()}" th:text="${@labels.status(incident.status())}">Assigned</span>
+        <span class="badge fs-6 text-bg-danger" th:if="${!#strings.isEmpty(incident.escalation())}"
+              th:text="'Escalated: ' + ${@labels.escalation(incident.escalation())}">Escalated</span>
+        <span class="ms-auto countdown fs-5" th:if="${incident.open() and !incident.linked() and !#strings.isEmpty(incident.resolutionDueIso())}"
+              th:attr="data-due=${incident.resolutionDueIso()}" title="Time left to resolve">--</span>
+    </div>
 
     <dl class="row">
         <dt class="col-sm-3">Description</dt><dd class="col-sm-9" th:text="${incident.description()}"></dd>
@@ -22,9 +27,10 @@
         <dt class="col-sm-3">Respond by</dt><dd class="col-sm-9" th:text="${incident.responseDue()}"></dd>
         <dt class="col-sm-3">Resolve by</dt><dd class="col-sm-9" th:text="${incident.resolutionDue()}"></dd>
         <dt class="col-sm-3">SLA status</dt>
-        <dd class="col-sm-9"><span class="badge" th:classappend="${incident.slaClass()}" th:text="${incident.sla()}">OK</span></dd>
+        <dd class="col-sm-9"><span class="badge" th:classappend="${incident.slaClass()}" th:text="${@labels.sla(incident.sla())}">On track</span></dd>
         <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
     </dl>
+  </div>
 
     <div class="alert alert-info" th:if="${incident.linked()}">
         <strong>Linked report.</strong> This is the same problem as
@@ -70,9 +76,14 @@
         <div class="card-body">
             <h5 class="card-title">Next step</h5>
 
+            <div class="alert alert-warning py-2" th:if="${incident.status() == 'ASSIGNED' and responseMinutesLate > 0}">
+                <i class="bi bi-exclamation-triangle"></i>
+                Response target missed by <strong th:text="${responseMinutesLate} + ' min'">25 min</strong>.
+                Acknowledging now records a late response and stops further escalation.
+            </div>
             <form th:if="${incident.status() == 'ASSIGNED'}"
                   th:action="@{/technician/incidents/{id}/acknowledge(id=${incident.id()})}" method="post">
-                <button type="submit" class="btn btn-primary">Acknowledge</button>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-eye"></i> Acknowledge</button>
             </form>
 
             <form th:if="${incident.status() == 'ACKNOWLEDGED'}"
@@ -122,7 +133,26 @@
         </div>
     </div>
 
-    <a class="btn btn-outline-secondary" th:href="@{/technician/incidents}">Back to my list</a>
+    <div class="page mb-3">
+        <div th:replace="~{fragments/timeline :: timeline(${history})}"></div>
+    </div>
+
+    <a class="btn btn-outline-secondary" th:href="@{/technician/incidents}"><i class="bi bi-arrow-left"></i> Back to my queue</a>
 </div>
+<script>
+    (function () {
+        const el = document.querySelector('.countdown[data-due]');
+        if (!el) return;
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function tick() {
+            let ms = new Date(el.dataset.due).getTime() - Date.now();
+            const overdue = ms < 0; ms = Math.abs(ms);
+            const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
+            el.innerHTML = '<i class="bi bi-stopwatch"></i> ' + (overdue ? 'overdue ' : '') + (h > 0 ? h + 'h ' : '') + pad(m) + 'm ' + pad(s) + 's';
+            el.className = 'ms-auto countdown fs-5 ' + (overdue ? 'text-danger' : (ms < 600000 ? 'text-warning' : 'text-success'));
+        }
+        tick(); setInterval(tick, 1000);
+    })();
+</script>
 </body>
 </html>

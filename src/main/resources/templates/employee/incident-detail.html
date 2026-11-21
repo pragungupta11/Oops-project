@@ -3,12 +3,13 @@
 <head th:replace="~{fragments/layout :: head('Incident')}"></head>
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
-<div class="container" style="max-width: 800px;">
+<div class="container mb-5" style="max-width: 860px;">
     <div class="alert alert-success" th:if="${justCreated}">
+        <i class="bi bi-check-circle"></i>
         Your incident was reported. It was classified and assigned to a technician automatically.
     </div>
     <div class="alert alert-warning" th:if="${duplicates != null and !#lists.isEmpty(duplicates)}">
-        <strong>You already reported something similar:</strong>
+        <strong><i class="bi bi-files"></i> You already reported something similar:</strong>
         <ul class="mb-0">
             <li th:each="d : ${duplicates}">
                 <a th:href="@{/employee/incidents/{id}(id=${d.id()})}" th:text="${d.id()}">INC1001</a>
@@ -17,28 +18,45 @@
         </ul>
     </div>
     <div class="alert alert-info" th:if="${incident.linked()}">
+        <i class="bi bi-link-45deg"></i>
         Our team confirmed this is part of an issue that is already being worked on.
         You will see the update here as soon as it is fixed.
     </div>
 
-    <h2 class="mb-3">
-        <span th:text="${incident.id()}">INC1001</span>
-        <span class="badge fs-6" th:classappend="${incident.priorityClass()}"
-              th:text="'Urgency: ' + ${incident.urgencyLabel()}">Urgency: High</span>
-        <span class="badge fs-6" th:classappend="${incident.statusClass()}" th:text="${incident.status()}">ASSIGNED</span>
-    </h2>
+    <div class="page">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <h2 class="mb-0 me-2" th:text="${incident.id()}">INC1001</h2>
+            <span class="badge fs-6" th:classappend="${incident.priorityClass()}"
+                  th:text="'Urgency: ' + ${incident.urgencyLabel()}">Urgency: High</span>
+            <span class="badge fs-6" th:classappend="${incident.statusClass()}"
+                  th:text="${@labels.status(incident.status())}">Assigned</span>
+        </div>
+        <p class="text-body-secondary mb-0" th:text="${incident.description()}">Payment app down</p>
 
-    <dl class="row">
-        <dt class="col-sm-3">Description</dt><dd class="col-sm-9" th:text="${incident.description()}"></dd>
-        <dt class="col-sm-3">Category</dt><dd class="col-sm-9" th:text="${incident.category()}"></dd>
-        <dt class="col-sm-3">Affected service</dt><dd class="col-sm-9" th:text="${incident.serviceName()}"></dd>
-        <dt class="col-sm-3">Technician</dt><dd class="col-sm-9" th:text="${incident.technicianName()}"></dd>
-        <dt class="col-sm-3">Reported</dt><dd class="col-sm-9" th:text="${incident.created()}"></dd>
-        <dt class="col-sm-3">Expected resolution by</dt><dd class="col-sm-9" th:text="${incident.resolutionDue()}"></dd>
-        <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
-    </dl>
+        <!-- progress tracker, like parcel tracking -->
+        <div class="tracker" th:with="step=${incident.trackerStep()}">
+            <div class="step" th:each="label, st : ${ {'Reported','Assigned','In progress','Resolved','Closed'} }"
+                 th:classappend="${st.index < step} ? 'done' : (${st.index == step} ? 'current' : '')">
+                <div class="circle">
+                    <i class="bi" th:classappend="${st.index < step} ? 'bi-check-lg' : 'bi-circle-fill small'"></i>
+                </div>
+                <span th:text="${label}">Reported</span>
+            </div>
+        </div>
 
-    <a class="btn btn-outline-secondary" th:href="@{/employee/incidents}">Back to my incidents</a>
+        <dl class="row mb-0">
+            <dt class="col-sm-4">Category</dt><dd class="col-sm-8" th:text="${incident.category()}"></dd>
+            <dt class="col-sm-4">Affected service</dt><dd class="col-sm-8" th:text="${incident.serviceName()}"></dd>
+            <dt class="col-sm-4">Technician</dt><dd class="col-sm-8" th:text="${incident.technicianName()}"></dd>
+            <dt class="col-sm-4">Reported</dt><dd class="col-sm-8" th:text="${incident.created()}"></dd>
+            <dt class="col-sm-4">Expected resolution by</dt><dd class="col-sm-8" th:text="${incident.resolutionDue()}"></dd>
+            <dt class="col-sm-4">Resolution</dt><dd class="col-sm-8" th:text="${incident.resolution()}"></dd>
+        </dl>
+
+        <div th:replace="~{fragments/timeline :: timeline(${history})}"></div>
+
+        <a class="btn btn-outline-secondary mt-2" th:href="@{/employee/incidents}"><i class="bi bi-arrow-left"></i> Back to my incidents</a>
+    </div>
 </div>
 </body>
 </html>

@@ -1,13 +1,16 @@
 package com.iitsm.iitsm.service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.iitsm.iitsm.model.EscalationEvent;
 import com.iitsm.iitsm.model.Incident;
+import com.iitsm.iitsm.model.SlaAlert;
 
 @Component
 public class SlaMonitorJob {
@@ -25,12 +28,13 @@ public class SlaMonitorJob {
     public void run() {
         LocalDateTime now = LocalDateTime.now();
         List<Incident> open = source.findOpenIncidents();
-        monitor.scan(open, now);
-        for (EscalationEvent event : escalation.evaluate(open, now)) {
-            open.stream()
-                .filter(i -> i.getId().equals(event.incidentId()))
-                .findFirst()
-                .ifPresent(source::save);
+        Set<String> changed = new HashSet<>();
+        for (SlaAlert alert : monitor.scan(open, now)) {
+            changed.add(alert.incidentId());
         }
+        for (EscalationEvent event : escalation.evaluate(open, now)) {
+            changed.add(event.incidentId());
+        }
+        open.stream().filter(i -> changed.contains(i.getId())).forEach(source::save);
     }
 }

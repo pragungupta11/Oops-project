@@ -19,7 +19,7 @@ public record IncidentView(String id, String description, String category, Strin
                            String technicianName, String technicianId, String reporter,
                            String created, String responseDue, String resolutionDue,
                            String sla, String slaClass, String resolution,
-                           String parentId) {
+                           String parentId, String resolutionDueIso, String escalation) {
 
     private static final DateTimeFormatter FORMAT =
             DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.ENGLISH);
@@ -48,7 +48,27 @@ public record IncidentView(String id, String description, String category, Strin
                 FORMAT.format(i.getCreatedAt()), responseDue, resolutionDue,
                 sla, slaClass(sla),
                 orDash(i.getResolution()),
-                i.getParentId() == null ? "" : i.getParentId());
+                i.getParentId() == null ? "" : i.getParentId(),
+                p == null ? "" : slaService.resolutionDeadline(i.getCreatedAt(), p).toString(),
+                i.getEscalationLevel() == null || i.getEscalationLevel().name().equals("TECHNICIAN")
+                        ? "" : i.getEscalationLevel().name());
+    }
+
+    /** Still being worked on (not resolved, verified or closed). */
+    public boolean open() {
+        return !status.equals("RESOLVED") && !status.equals("VERIFIED") && !status.equals("CLOSED");
+    }
+
+    /** Step of the employee's progress tracker: 0 reported, 1 assigned, 2 in progress, 3 resolved, 4 closed. */
+    public int trackerStep() {
+        return switch (status) {
+            case "NEW", "CLASSIFIED" -> 0;
+            case "ASSIGNED" -> 1;
+            case "ACKNOWLEDGED", "IN_PROGRESS" -> 2;
+            case "RESOLVED", "VERIFIED" -> 3;
+            case "CLOSED" -> 4;
+            default -> 0;
+        };
     }
 
     public boolean linked() {

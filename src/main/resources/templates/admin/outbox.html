@@ -3,11 +3,12 @@
 <head th:replace="~{fragments/layout :: head('Email outbox')}"></head>
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
-<div class="container">
-    <h2 class="mb-1">Email outbox</h2>
+<div class="container mb-5">
+  <div class="page">
+    <h2 class="mb-1"><i class="bi bi-envelope"></i> Email outbox</h2>
     <p class="text-muted">Simulated e-mails: built exactly like real ones but not sent to a mail server.</p>
     <p class="text-muted" th:if="${#lists.isEmpty(emails)}">No e-mails yet.</p>
-    <table class="table table-sm align-middle" th:unless="${#lists.isEmpty(emails)}">
+    <div class="table-responsive"><table class="table table-sm align-middle" th:unless="${#lists.isEmpty(emails)}">
         <thead><tr><th>Sent</th><th>To</th><th>Subject</th><th>Message</th></tr></thead>
         <tbody>
         <tr th:each="e : ${emails}">
@@ -17,7 +18,8 @@
             <td th:text="${e.body()}">We received your report.</td>
         </tr>
         </tbody>
-    </table>
+    </table></div>
+  </div>
 </div>
 </body>
 </html>

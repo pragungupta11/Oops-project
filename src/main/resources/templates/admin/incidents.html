@@ -3,8 +3,8 @@
 <head th:replace="~{fragments/layout :: head('All incidents')}"></head>
 <body>
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
-<div class="container-fluid px-4">
-    <h2 class="mb-3">All incidents</h2>
+<div class="container-fluid px-4 mb-5">
+    <h2 class="mb-3"><i class="bi bi-table"></i> All incidents</h2>
     <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
     <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
 
@@ -53,7 +53,7 @@
             <label class="form-label small mb-0" for="status">Status</label>
             <select class="form-select form-select-sm" id="status" name="status">
                 <option value="">All</option>
-                <option th:each="s : ${statuses}" th:value="${s.name()}" th:text="${s.name()}"
+                <option th:each="s : ${statuses}" th:value="${s.name()}" th:text="${@labels.status(s.name())}"
                         th:selected="${s.name() == selStatus}"></option>
             </select>
         </div>
@@ -85,7 +85,7 @@
             <label class="form-label small mb-0" for="slaStatus">SLA</label>
             <select class="form-select form-select-sm" id="slaStatus" name="slaStatus">
                 <option value="">All</option>
-                <option th:each="o : ${slaOptions}" th:value="${o}" th:text="${o}"
+                <option th:each="o : ${slaOptions}" th:value="${o}" th:text="${@labels.sla(o)}"
                         th:selected="${o == selSla}"></option>
             </select>
         </div>
@@ -101,7 +101,8 @@
 
     <p class="text-muted" th:text="${#lists.size(rows)} + ' incident(s) shown'">0 incident(s) shown</p>
 
-    <table class="table table-hover table-sm align-middle">
+    <div class="page p-2 table-responsive">
+    <table class="table table-hover table-sm align-middle mb-0">
         <thead>
         <tr>
             <th>ID</th><th>Description</th><th>Category</th><th>Service</th><th>Priority</th>
@@ -117,8 +118,10 @@
             <td th:text="${i.category()}">Network</td>
             <td th:text="${i.serviceName()}">VPN</td>
             <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.priority()}">P2</span></td>
-            <td><span class="badge" th:classappend="${i.statusClass()}" th:text="${i.status()}">ASSIGNED</span></td>
-            <td><span class="badge" th:classappend="${i.slaClass()}" th:text="${i.sla()}">OK</span></td>
+            <td><span class="badge" th:classappend="${i.statusClass()}" th:text="${@labels.status(i.status())}">Assigned</span>
+                <span class="badge text-bg-danger" th:if="${!#strings.isEmpty(i.escalation())}"
+                      th:text="${@labels.escalation(i.escalation())}" title="Escalation level">Team lead</span></td>
+            <td><span class="badge" th:classappend="${i.slaClass()}" th:text="${@labels.sla(i.sla())}">On track</span></td>
             <td th:text="${i.technicianName()}">Ravi Kumar</td>
             <td th:text="${i.reporter()}">employee1</td>
             <td th:text="${i.created()}">19 Nov 2026, 10:00</td>
@@ -142,6 +145,7 @@
         </tr>
         </tbody>
     </table>
+    </div>
 </div>
 </body>
 </html>

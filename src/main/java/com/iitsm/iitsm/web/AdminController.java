@@ -39,15 +39,18 @@ public class AdminController {
     private final SlaService slaService;
     private final IncidentWorkflowService workflow;
     private final AssignmentStrategyRegistry strategies;
+    private final UiLabels labels;
 
     public AdminController(IncidentPersistenceService incidents, TechnicianPersistenceService technicians,
                            SlaService slaService, IncidentWorkflowService workflow,
-                           AssignmentStrategyRegistry strategies) {
+                           AssignmentStrategyRegistry strategies,
+                           UiLabels labels) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
         this.workflow = workflow;
         this.strategies = strategies;
+        this.labels = labels;
     }
 
     /** One bar on the dashboard. */
@@ -195,6 +198,24 @@ public class AdminController {
                         t.getActiveIncidents(), t.isAvailable() ? "Yes" : "No"))
                 .toList();
 
+        // charts (labels in plain words) and the "needs attention" list
+        model.addAttribute("statusLabels", byStatus.stream().map(b -> labels.status(b.label())).toList());
+        model.addAttribute("statusCounts", byStatus.stream().map(Bar::count).toList());
+        java.util.Map<String, Long> perCategory = new java.util.LinkedHashMap<>();
+        for (com.iitsm.iitsm.model.Category c : com.iitsm.iitsm.model.Category.values()) {
+            perCategory.put(c.label(), 0L);   // show every category, also the quiet ones
+        }
+        all.forEach(v -> perCategory.merge(v.category(), 1L, Long::sum));
+        model.addAttribute("categoryLabels", new java.util.ArrayList<>(perCategory.keySet()));
+        model.addAttribute("categoryCounts", new java.util.ArrayList<>(perCategory.values()));
+        model.addAttribute("attention", all.stream()
+                .filter(v -> v.sla().equals("VIOLATED") || v.sla().equals("AT_RISK")
+                        || !v.escalation().isEmpty() && v.open() || v.status().equals("RESOLVED"))
+                .sorted(Comparator.comparing((IncidentView v) -> attentionRank(v)))
+                .limit(8)
+                .toList());
+        model.addAttribute("refreshedAt", java.time.LocalTime.now().withNano(0).toString());
+
         model.addAttribute("total", total);
         model.addAttribute("open", total - resolvedOrDone);
         model.addAttribute("atRisk", count(all, v -> v.sla().equals("AT_RISK")));
@@ -208,11 +229,19 @@ public class AdminController {
         return "admin/dashboard";
     }
 
+    /** Lower = more urgent: violated, escalated, at risk, then waiting for verification. */
+    private static int attentionRank(IncidentView v) {
+        if (v.sla().equals("VIOLATED")) return 0;
+        if (!v.escalation().isEmpty() && v.open()) return 1;
+        if (v.sla().equals("AT_RISK")) return 2;
+        return 3;
+    }
+
     @PostMapping("/strategy")
     public String switchStrategy(@RequestParam("name") String name, RedirectAttributes redirect) {
         try {
             strategies.switchTo(name);
-            redirect.addFlashAttribute("message", "New incidents will now be assigned using: " + name);
+            redirect.addFlashAttribute("message", "New incidents will now be assigned using: " + labels.strategy(name));
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }

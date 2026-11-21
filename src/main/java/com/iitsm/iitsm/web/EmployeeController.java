@@ -33,15 +33,18 @@ public class EmployeeController {
     private final ServiceCatalog catalog;
     private final SlaService slaService;
     private final CategorySuggester categorySuggester;
+    private final IncidentTimeline timeline;
 
     public EmployeeController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                               ServiceCatalog catalog, SlaService slaService,
-                              CategorySuggester categorySuggester) {
+                              CategorySuggester categorySuggester,
+                              IncidentTimeline timeline) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.catalog = catalog;
         this.slaService = slaService;
         this.categorySuggester = categorySuggester;
+        this.timeline = timeline;
     }
 
     /** What the report form shows under the category box. */
@@ -126,6 +129,7 @@ public class EmployeeController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This is not your incident");
         }
         model.addAttribute("incident", IncidentView.of(incident, slaService));
+        model.addAttribute("history", timeline.forIncident(incident.getId(), false));
         return "employee/incident-detail";
     }
 

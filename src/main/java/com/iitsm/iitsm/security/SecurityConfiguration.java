@@ -23,13 +23,13 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.disable())
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/h2-console/**").permitAll()
+                        .requestMatchers("/h2-console/**", "/login", "/error").permitAll()
                         .requestMatchers("/employee/**").hasRole("EMPLOYEE")
                         .requestMatchers("/technician/**").hasRole("TECHNICIAN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated())
-                .formLogin(form -> form.defaultSuccessUrl("/", true))
+                .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/", true).permitAll())
                 .logout(Customizer.withDefaults())
                 .build();
     }

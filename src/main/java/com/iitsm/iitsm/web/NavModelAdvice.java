@@ -1,5 +1,6 @@
 package com.iitsm.iitsm.web;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 
 import com.iitsm.iitsm.repository.NotificationRepository;
@@ -14,10 +15,22 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 public class NavModelAdvice {
 
     private final NotificationRepository notifications;
+    private final String brand;
+    private final String tagline;
 
-    public NavModelAdvice(NotificationRepository notifications) {
+    public NavModelAdvice(NotificationRepository notifications,
+                          @Value("${app.brand:IncidentIQ}") String brand,
+                          @Value("${app.tagline:}") String tagline) {
         this.notifications = notifications;
+        this.brand = brand;
+        this.tagline = tagline;
     }
+
+    @ModelAttribute("brand")
+    public String brand() { return brand; }
+
+    @ModelAttribute("tagline")
+    public String tagline() { return tagline; }
 
     /** Number shown on the bell icon. */
     @ModelAttribute("unreadNotifications")

@@ -1,7 +1,9 @@
 package com.iitsm.iitsm.persistence.entity;
 
+import com.iitsm.iitsm.model.AlertType;
 import com.iitsm.iitsm.model.EscalationLevel;
 import com.iitsm.iitsm.model.Incident;
+import com.iitsm.iitsm.model.SlaStatus;
 import com.iitsm.iitsm.model.IncidentStatus;
 import com.iitsm.iitsm.model.Priority;
 import jakarta.persistence.Column;
@@ -79,6 +81,15 @@ public class IncidentEntity {
 
     private Integer suggestedMatchPercent;
 
+    /** Last SLA state the monitor reported, so alerts are not repeated after a restart. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private SlaStatus reportedResponseSla;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private SlaStatus reportedResolutionSla;
+
     protected IncidentEntity() { }
 
     public IncidentEntity(String id, String description, String category,
@@ -114,6 +125,8 @@ public class IncidentEntity {
         entity.parentId = incident.getParentId();
         entity.suggestedParentId = incident.getSuggestedParentId();
         entity.suggestedMatchPercent = incident.getSuggestedMatchPercent();
+        entity.reportedResponseSla = incident.getReportedSla(AlertType.RESPONSE);
+        entity.reportedResolutionSla = incident.getReportedSla(AlertType.RESOLUTION);
         return entity;
     }
 
@@ -132,6 +145,8 @@ public class IncidentEntity {
         }
         incident.restoreReassignmentRequest(requestedCategory, reassignmentReason);
         incident.restoreDuplicateState(parentId, suggestedParentId, suggestedMatchPercent);
+        incident.setReportedSla(AlertType.RESPONSE, reportedResponseSla);
+        incident.setReportedSla(AlertType.RESOLUTION, reportedResolutionSla);
         return incident;
     }
 

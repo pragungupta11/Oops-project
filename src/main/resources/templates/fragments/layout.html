@@ -3,30 +3,104 @@
 <head th:fragment="head(title)">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${title} + ' - I-ITSM'">I-ITSM</title>
+    <title th:text="${title} + ' · ' + ${brand}">IncidentIQ</title>
+    <!-- Apply the saved light/dark theme before the page paints, so it never flashes. -->
+    <script>
+        (function () {
+            let theme = null;
+            try { theme = localStorage.getItem('theme'); } catch (e) { }
+            if (theme !== 'light' && theme !== 'dark') {
+                theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root { --brand: #4f46e5; --brand-2: #0ea5e9; }
+        [data-bs-theme="dark"] { --bs-body-bg: #0f172a; --bs-tertiary-bg: #1e293b; }
+        body { background: var(--bs-tertiary-bg); min-height: 100vh; }
+        .app-nav { background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+        .app-nav .nav-link { color: rgba(255,255,255,.85); }
+        .app-nav .nav-link:hover, .app-nav .nav-link.active { color: #fff; }
+        .brand-mark { font-weight: 700; letter-spacing: .3px; color: #fff; }
+        .brand-mark i { margin-right: .35rem; }
+        .role-badge { background: rgba(255,255,255,.2); color: #fff; font-weight: 500; }
+        .page { background: var(--bs-body-bg); border-radius: 1rem; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .stat-card { border: 0; border-radius: .9rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .stat-card .stat-icon { font-size: 1.6rem; opacity: .85; }
+        /* incident timeline */
+        .timeline { list-style: none; padding-left: 0; position: relative; }
+        .timeline::before { content: ""; position: absolute; left: 15px; top: 4px; bottom: 4px; width: 2px; background: var(--bs-border-color); }
+        .timeline li { position: relative; padding-left: 46px; margin-bottom: 1rem; }
+        .timeline .dot { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%;
+                         display: flex; align-items: center; justify-content: center; color: #fff; }
+        /* employee progress tracker */
+        .tracker { display: flex; justify-content: space-between; position: relative; margin: 1.5rem 0 2rem; }
+        .tracker::before { content: ""; position: absolute; top: 17px; left: 8%; right: 8%; height: 3px; background: var(--bs-border-color); }
+        .tracker .step { text-align: center; flex: 1; position: relative; z-index: 1; font-size: .85rem; }
+        .tracker .circle { width: 36px; height: 36px; border-radius: 50%; margin: 0 auto .35rem; display: flex;
+                           align-items: center; justify-content: center; background: var(--bs-secondary-bg);
+                           border: 3px solid var(--bs-border-color); color: var(--bs-secondary-color); }
+        .tracker .done .circle { background: var(--brand); border-color: var(--brand); color: #fff; }
+        .tracker .current .circle { background: var(--bs-body-bg); border-color: var(--brand); color: var(--brand); }
+        .tracker .done, .tracker .current { font-weight: 600; }
+        /* technician queue */
+        .queue-card { border-left: 5px solid var(--bs-border-color); border-radius: .75rem; }
+        .queue-card.sla-ok { border-left-color: #198754; }
+        .queue-card.sla-risk { border-left-color: #ffc107; }
+        .queue-card.sla-violated { border-left-color: #dc3545; }
+        .countdown { font-variant-numeric: tabular-nums; font-weight: 600; }
+    </style>
 </head>
 <body>
-<nav th:fragment="navbar" class="navbar navbar-expand navbar-dark bg-dark px-3 mb-4">
-    <span class="navbar-brand">I-ITSM</span>
-    <ul class="navbar-nav me-auto">
-        <li class="nav-item" th:if="${isEmployee}"><a class="nav-link" th:href="@{/employee/incidents}">My incidents</a></li>
-        <li class="nav-item" th:if="${isEmployee}"><a class="nav-link" th:href="@{/employee/report}">Report incident</a></li>
-        <li class="nav-item" th:if="${isTechnician}"><a class="nav-link" th:href="@{/technician/incidents}">Assigned to me</a></li>
-        <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/dashboard}">Dashboard</a></li>
-        <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/incidents}">All incidents</a></li>
-        <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/outbox}">Email outbox</a></li>
-    </ul>
-    <a class="btn btn-outline-light btn-sm me-3 position-relative" th:href="@{/notifications}" title="Notifications">
-        &#128276;
-        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-              th:if="${unreadNotifications != null and unreadNotifications > 0}"
-              th:text="${unreadNotifications}">3</span>
-    </a>
-    <span class="navbar-text me-3" th:text="${currentUser}">user</span>
-    <form th:action="@{/logout}" method="post" class="d-inline">
-        <button type="submit" class="btn btn-outline-light btn-sm">Log out</button>
-    </form>
+<nav th:fragment="navbar" class="navbar navbar-expand-lg navbar-dark app-nav px-3 mb-4">
+    <a class="navbar-brand brand-mark" th:href="@{/}"><i class="bi bi-lightning-charge-fill"></i><span th:text="${brand}">IncidentIQ</span></a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+            aria-controls="mainNav" aria-expanded="false" aria-label="Menu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+        <ul class="navbar-nav me-auto">
+            <li class="nav-item" th:if="${isEmployee}"><a class="nav-link" th:href="@{/employee/incidents}"><i class="bi bi-list-ul"></i> My incidents</a></li>
+            <li class="nav-item" th:if="${isEmployee}"><a class="nav-link" th:href="@{/employee/report}"><i class="bi bi-plus-circle"></i> Report incident</a></li>
+            <li class="nav-item" th:if="${isTechnician}"><a class="nav-link" th:href="@{/technician/incidents}"><i class="bi bi-inboxes"></i> My queue</a></li>
+            <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/dashboard}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+            <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/incidents}"><i class="bi bi-table"></i> All incidents</a></li>
+            <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/outbox}"><i class="bi bi-envelope"></i> Email outbox</a></li>
+        </ul>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-light theme-toggle" title="Switch light/dark mode"
+                    onclick="window.toggleTheme()"><i class="bi bi-moon-stars"></i></button>
+            <a class="btn btn-sm btn-outline-light position-relative" th:href="@{/notifications}" title="Notifications">
+                <i class="bi bi-bell"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                      th:if="${unreadNotifications != null and unreadNotifications > 0}"
+                      th:text="${unreadNotifications}">3</span>
+            </a>
+            <span class="badge role-badge" th:if="${isEmployee}">Employee</span>
+            <span class="badge role-badge" th:if="${isTechnician}">Technician</span>
+            <span class="badge role-badge" th:if="${isAdmin}">Admin</span>
+            <span class="navbar-text text-white" th:text="${currentUser}">user</span>
+            <form th:action="@{/logout}" method="post" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-light"><i class="bi bi-box-arrow-right"></i> Log out</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        window.toggleTheme = function () {
+            const next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-bs-theme', next);
+            try { localStorage.setItem('theme', next); } catch (e) { }
+            document.querySelectorAll('.theme-toggle i').forEach(i =>
+                i.className = next === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars');
+            window.dispatchEvent(new CustomEvent('themechange', { detail: next }));
+        };
+        document.querySelectorAll('.theme-toggle i').forEach(i =>
+            i.className = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars');
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 </nav>
 </body>
 </html>
