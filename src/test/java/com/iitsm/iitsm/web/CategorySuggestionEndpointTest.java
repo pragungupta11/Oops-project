@@ -12,7 +12,7 @@ import org.springframework.test.context.TestPropertySource;
 import com.iitsm.iitsm.strategy.category.FallbackCategorySuggester;
 
 @SpringBootTest
-@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:categorysuggestiontest")
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:categorysuggestiontest", "app.ai.gemini.api-key="})
 class CategorySuggestionEndpointTest {
 
     @Autowired EmployeeController controller;
@@ -32,7 +32,8 @@ class CategorySuggestionEndpointTest {
     }
 
     @Test
-    void noAiIsConfiguredYet() {
-        assertEquals(0, suggester.remoteCount());   // purely rule-based until an AI adapter is added
+    void geminiIsPluggedInButWithoutAKeyTheKeywordsAnswer() {
+        assertEquals(1, suggester.remoteCount());   // the Gemini adapter is registered
+        assertEquals("keywords", controller.suggestCategory("Payment app down").getBody().source());
     }
 }

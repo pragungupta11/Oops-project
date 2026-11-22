@@ -87,6 +87,26 @@ Each status is a State class that knows its legal next statuses; anything else t
 Who closes: the **employee confirms** the fix (RESOLVED → VERIFIED → CLOSED); if they do not answer
 within 3 days (`app.auto-close-after`) it closes automatically; the admin can override with a reason.
 
+## AI category suggestions (Google Gemini, optional)
+
+While an employee types, the category is suggested. With a Gemini API key the suggestion comes from
+**Google's Gemini API** (third-party integration); without one, or if Gemini is slow, down or gives an
+answer that is not an active category, local keyword rules answer instead, so it always works.
+`GeminiCategorySuggester` is an **Adapter** from Gemini's REST API to our `CategorySuggester` interface,
+chained before the keyword rules by `FallbackCategorySuggester`.
+
+To turn it on, create a free key in Google AI Studio and start the app with it:
+
+```
+export GEMINI_API_KEY=your-key-here      # Windows: set GEMINI_API_KEY=your-key-here
+./mvnw spring-boot:run
+```
+
+The key is read only from that environment variable (never stored in the repository). The model is
+set by `app.ai.gemini.model`. The admin dashboard shows whether AI suggestions are on. Note: with AI
+on, the incident description is sent to Google for classification; a production deployment would
+need a data-processing agreement.
+
 ## Key rules
 
 - **Priority** (default, score-based) = impact × urgency × the affected service's business criticality
@@ -133,7 +153,7 @@ limit, moving an incident, keeping linked reports in step) live in `IncidentOper
 
 Design patterns: **State** (lifecycle), **Strategy** (priority, assignment, similarity, category
 suggestion), **Observer** (SLA alerts, escalations and incident events → notifications), **Factory**
-(incident creation), **Repository** (persistence), **Facade** (the workflow service).
+(incident creation), **Repository** (persistence), **Facade** (the workflow service), **Adapter** (Gemini API).
 
 Notifications go through every `NotificationChannel`: **in-app** (bell icon) and **simulated e-mail**
 (an outbox the admin can read, addressed to each user's registered e-mail). Adding a channel is one
@@ -176,6 +196,6 @@ isolated: a failing channel is logged and skipped, and the incident action still
 - Dashboard and catalogue pages still aggregate over all incidents; production would use count
   queries. Lists that grow with use (incidents, audit log) are paginated.
 - E-mail is simulated (outbox); there is no e-mail verification at sign-up, no password reset and no
-  lockout after repeated wrong passwords; no REST API.
+  lockout after repeated wrong passwords; no REST API of our own.
 - Two reports of the same problem in the same second do not see each other as duplicates.
 - Removing a technician's skill does not move their open incidents of that category (the admin can).

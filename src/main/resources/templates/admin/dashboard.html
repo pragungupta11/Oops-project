@@ -10,6 +10,10 @@
             <div class="small text-body-secondary">
                 <span class="badge text-bg-success"><i class="bi bi-broadcast"></i> Live</span>
                 updated <span th:text="${refreshedAt}">10:00:00</span> · refreshes every 30 s
+                · <span th:if="${aiEnabled}" class="badge text-bg-info" th:title="'Category suggestions by Google Gemini (' + ${aiModel} + '), keyword rules as fallback'">
+                    <i class="bi bi-stars"></i> AI suggestions: Gemini</span>
+                <span th:unless="${aiEnabled}" class="badge text-bg-secondary" title="Set GEMINI_API_KEY to turn on AI category suggestions">
+                    <i class="bi bi-stars"></i> AI suggestions: off (keywords)</span>
             </div>
         </div>
         <div class="text-end">

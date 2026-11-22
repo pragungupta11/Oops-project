@@ -26,7 +26,7 @@ import com.iitsm.iitsm.strategy.category.CategorySuggester;
 /** Admin-managed IT services, service-specific SLAs and admin-managed categories, end to end. */
 @SpringBootTest
 @TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:catalogtest",
-        "app.max-reports-per-hour=1000", "app.max-active-incidents=1000"})
+        "app.max-reports-per-hour=1000", "app.max-active-incidents=1000", "app.ai.gemini.api-key="})
 class CatalogConfigurationTest {
 
     @Autowired ServiceCatalog services;

@@ -27,6 +27,7 @@ import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.service.AssignmentStrategyRegistry;
 import com.iitsm.iitsm.service.PriorityStrategyRegistry;
+import com.iitsm.iitsm.strategy.category.GeminiCategorySuggester;
 import com.iitsm.iitsm.service.SlaService;
 import com.iitsm.iitsm.exception.InvalidSlaConfigurationException;
 import com.iitsm.iitsm.persistence.entity.AuditLogEntity;
@@ -59,6 +60,7 @@ public class AdminController {
     private final IncidentWorkflowService workflow;
     private final AssignmentStrategyRegistry strategies;
     private final PriorityStrategyRegistry priorityStrategies;
+    private final GeminiCategorySuggester gemini;
     private final UiLabels labels;
     private final ServiceCatalog serviceCatalog;
     private final CategoryCatalog categoryCatalog;
@@ -75,7 +77,8 @@ public class AdminController {
                            IncidentConversationService conversation,
                            ServiceCatalog serviceCatalog,
                            CategoryCatalog categoryCatalog,
-                           PriorityStrategyRegistry priorityStrategies) {
+                           PriorityStrategyRegistry priorityStrategies,
+                           GeminiCategorySuggester gemini) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
@@ -88,6 +91,7 @@ public class AdminController {
         this.serviceCatalog = serviceCatalog;
         this.categoryCatalog = categoryCatalog;
         this.priorityStrategies = priorityStrategies;
+        this.gemini = gemini;
     }
 
     /** One bar on the dashboard. */
@@ -423,6 +427,8 @@ public class AdminController {
         model.addAttribute("activeStrategy", strategies.currentName());
         model.addAttribute("priorityStrategyNames", new TreeSet<>(priorityStrategies.availableNames()));
         model.addAttribute("activePriorityStrategy", priorityStrategies.currentName());
+        model.addAttribute("aiEnabled", gemini.isEnabled());
+        model.addAttribute("aiModel", gemini.model());
         return "admin/dashboard";
     }
 
