@@ -29,6 +29,7 @@
         <dt class="col-sm-3">SLA status</dt>
         <dd class="col-sm-9"><span class="badge" th:classappend="${incident.slaClass()}" th:text="${@labels.sla(incident.sla())}">On track</span></dd>
         <dt class="col-sm-3">Resolution</dt><dd class="col-sm-9" th:text="${incident.resolution()}"></dd>
+        <dt class="col-sm-3" th:if="${incident.closed() != '-'}">Closed</dt><dd class="col-sm-9" th:if="${incident.closed() != '-'}" th:text="${incident.closed()}"></dd>
     </dl>
   </div>
 

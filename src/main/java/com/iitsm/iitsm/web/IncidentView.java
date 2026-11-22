@@ -19,7 +19,7 @@ public record IncidentView(String id, String description, String category, Strin
                            String technicianName, String technicianId, String reporter,
                            String created, String responseDue, String resolutionDue,
                            String sla, String slaClass, String resolution,
-                           String parentId, String resolutionDueIso, String escalation) {
+                           String parentId, String resolutionDueIso, String escalation, String closed) {
 
     private static final DateTimeFormatter FORMAT =
             DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.ENGLISH);
@@ -57,7 +57,9 @@ public record IncidentView(String id, String description, String category, Strin
                 i.getParentId() == null ? "" : i.getParentId(),
                 p == null ? "" : slaService.resolutionDeadline(i.getCreatedAt(), p).toString(),
                 i.getEscalationLevel() == null || i.getEscalationLevel().name().equals("TECHNICIAN")
-                        ? "" : i.getEscalationLevel().name());
+                        ? "" : i.getEscalationLevel().name(),
+                i.getClosedAt() == null ? "-" : FORMAT.format(i.getClosedAt())
+                        + (i.getClosedBy() == null ? "" : " by " + i.getClosedBy()));
     }
 
     /** Still being worked on (not resolved, verified or closed). */

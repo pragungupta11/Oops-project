@@ -13,14 +13,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 
 import com.iitsm.iitsm.exception.AccountException;
-import com.iitsm.iitsm.exception.TechnicianUnavailableException;
 import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.repository.AppUserRepository;
 import com.iitsm.iitsm.web.IncidentWorkflowService;
 
 @SpringBootTest
-@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:accounttest", "app.max-reports-per-hour=1000"})
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:accounttest", "app.max-reports-per-hour=1000", "app.max-active-incidents=1000"})
 class UserAccountServiceTest {
 
     @Autowired UserAccountService accounts;
@@ -28,6 +27,7 @@ class UserAccountServiceTest {
     @Autowired AppUserDetailsService login;
     @Autowired TechnicianPersistenceService technicians;
     @Autowired IncidentWorkflowService workflow;
+    @Autowired com.iitsm.iitsm.persistence.service.IncidentPersistenceService incidents;
 
     @Test
     void signUpAlwaysCreatesAnEmployee() {
@@ -97,11 +97,13 @@ class UserAccountServiceTest {
                 .forEach(t -> accounts.setAvailability(t.getId(), false));
         accounts.setAvailability("cloudonly", false);
 
-        assertThrows(TechnicianUnavailableException.class, () -> workflow.report("employee1",
-                "Cloud bucket permission denied", Category.CLOUD, 2, 2, "Payment Gateway"));
+        // nobody available: the report is NOT lost, it waits in the queue unassigned
+        var queued = workflow.report("employee1", "Cloud bucket permission denied",
+                Category.CLOUD, 2, 2, "Payment Gateway").incident();
+        assertEquals(null, queued.getAssignedTechnician());
 
         accounts.setAvailability("cloudonly", true);
-        assertEquals("cloudonly", workflow.report("employee1", "Cloud bucket permission denied",
-                Category.CLOUD, 2, 2, "Payment Gateway").incident().getAssignedTechnician().getId());
+        workflow.assignQueuedIncidents();
+        assertEquals("cloudonly", incidents.findById(queued.getId()).getAssignedTechnician().getId());
     }
 }

@@ -27,7 +27,9 @@ public class IncidentPersistenceService {
 
     @Transactional
     public Incident save(Incident incident) {
-        boolean existed = incidentRepository.existsById(incident.getId());
+        IncidentEntity before = incidentRepository.findById(incident.getId()).orElse(null);
+        boolean existed = before != null;
+        String previousState = before == null ? null : String.valueOf(before.getStatus());
         TechnicianEntity technician = null;
         if (incident.getAssignedTechnician() != null) {
             String technicianId = incident.getAssignedTechnician().getId();
@@ -36,7 +38,8 @@ public class IncidentPersistenceService {
         }
         IncidentEntity saved = incidentRepository.save(IncidentEntity.fromDomain(incident, technician));
         auditService.record(existed ? "INCIDENT_UPDATED" : "INCIDENT_CREATED", "INCIDENT",
-                saved.getId(), "Incident record saved; status=" + incident.getStatus());
+                saved.getId(), "Incident record saved; status=" + incident.getStatus(),
+                previousState, String.valueOf(incident.getStatus()));
         return saved.toDomain();
     }
 

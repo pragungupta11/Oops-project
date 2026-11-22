@@ -20,7 +20,7 @@ import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 
 /** Each test uses its own vocabulary so that incidents from other tests never look similar. */
 @SpringBootTest
-@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:duplicatelinkingtest", "app.max-reports-per-hour=1000"})
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:duplicatelinkingtest", "app.max-reports-per-hour=1000", "app.max-active-incidents=1000"})
 class DuplicateLinkingWorkflowTest {
 
     @Autowired IncidentWorkflowService workflow;

@@ -17,7 +17,7 @@ import com.iitsm.iitsm.security.UserAccountService;
 
 /** Open incidents of an unavailable or deactivated technician are handed over, never left stuck. */
 @SpringBootTest
-@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:handovertest", "app.max-reports-per-hour=1000"})
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:handovertest", "app.max-reports-per-hour=1000", "app.max-active-incidents=1000"})
 class TechnicianHandoverTest {
 
     @Autowired IncidentWorkflowService workflow;

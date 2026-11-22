@@ -22,6 +22,8 @@ public class Incident {
     private Technician assignedTechnician;
     private LocalDateTime acknowledgedAt;
     private LocalDateTime resolvedAt;
+    private LocalDateTime closedAt;   // closure information: when ...
+    private String closedBy;          // ... and by whom (user, or "system (auto-close)")
     private EscalationLevel escalationLevel = EscalationLevel.TECHNICIAN;
 
     private User reporter;
@@ -258,5 +260,22 @@ public class Incident {
         SlaStatus value = status == null ? SlaStatus.OK : status;
         if (type == AlertType.RESPONSE) reportedResponseSla = value;
         else reportedResolutionSla = value;
+    }
+
+    // ------------------------------------------------------------ closure information
+
+    public LocalDateTime getClosedAt() { return closedAt; }
+    public String getClosedBy() { return closedBy; }
+
+    /** Records when and by whom the incident was closed (call right after the CLOSED transition). */
+    public void markClosed(String by) {
+        this.closedAt = LocalDateTime.now();
+        this.closedBy = by;
+    }
+
+    /** Used only when loading from the database. */
+    public void restoreClosure(LocalDateTime closedAt, String closedBy) {
+        this.closedAt = closedAt;
+        this.closedBy = closedBy;
     }
 }

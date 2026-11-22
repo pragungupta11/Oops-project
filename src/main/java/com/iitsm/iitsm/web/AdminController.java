@@ -40,6 +40,7 @@ public class AdminController {
     private final IncidentWorkflowService workflow;
     private final AssignmentStrategyRegistry strategies;
     private final UiLabels labels;
+    private final ServiceCatalog serviceCatalog;
     private final IncidentConversationService conversation;
     private final com.iitsm.iitsm.repository.AuditLogRepository auditLogs;
     private final com.iitsm.iitsm.service.SlaConfigurationService slaConfig;
@@ -50,7 +51,8 @@ public class AdminController {
                            UiLabels labels,
                            com.iitsm.iitsm.service.SlaConfigurationService slaConfig,
                            com.iitsm.iitsm.repository.AuditLogRepository auditLogs,
-                           IncidentConversationService conversation) {
+                           IncidentConversationService conversation,
+                           ServiceCatalog serviceCatalog) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
@@ -60,10 +62,14 @@ public class AdminController {
         this.slaConfig = slaConfig;
         this.auditLogs = auditLogs;
         this.conversation = conversation;
+        this.serviceCatalog = serviceCatalog;
     }
 
     /** One bar on the dashboard. */
     public record Bar(String label, int count, int percent) {}
+
+    /** One row of the service analysis report. */
+    public record ServiceRow(String name, int criticality, int total, int open, int violated) {}
 
     /** One pending re-routing request shown to the admin. */
     public record ReroutingView(String id, String description, String currentCategory,
@@ -82,9 +88,17 @@ public class AdminController {
                        @RequestParam(name = "technicianId", defaultValue = "") String technicianId,
                        @RequestParam(name = "slaStatus", defaultValue = "") String slaStatus,
                        @RequestParam(name = "keyword", defaultValue = "") String keyword,
+                       @RequestParam(name = "service", defaultValue = "") String service,
+                       @RequestParam(name = "from", defaultValue = "") String from,
+                       @RequestParam(name = "to", defaultValue = "") String to,
                        Model model) {
         String kw = keyword.trim();
+        java.time.LocalDate fromDate = parseDate(from);
+        java.time.LocalDate toDate = parseDate(to);
         List<IncidentView> rows = incidents.findAll().stream()
+                .filter(i -> service.isBlank() || service.equals(i.getServiceName()))
+                .filter(i -> fromDate == null || !i.getCreatedAt().toLocalDate().isBefore(fromDate))
+                .filter(i -> toDate == null || !i.getCreatedAt().toLocalDate().isAfter(toDate))
                 .sorted(Comparator.comparing(Incident::getCreatedAt).reversed())
                 .map(i -> IncidentView.of(i, slaService))
                 .filter(v -> status.isBlank() || v.status().equals(status))
@@ -106,6 +120,10 @@ public class AdminController {
         model.addAttribute("selCategory", category);
         model.addAttribute("selTech", technicianId);
         model.addAttribute("selSla", slaStatus);
+        model.addAttribute("services", serviceCatalog.all());
+        model.addAttribute("selService", service);
+        model.addAttribute("selFrom", fromDate == null ? "" : fromDate.toString());
+        model.addAttribute("selTo", toDate == null ? "" : toDate.toString());
         model.addAttribute("keyword", keyword);
 
         List<Technician> allTechs = technicians.findAll();
@@ -118,6 +136,22 @@ public class AdminController {
                 .toList();
         model.addAttribute("rerouting", rerouting);
         return "admin/incidents";
+    }
+
+    /** Change the priority of an open incident (reason required); notifies technician and employee. */
+    @PostMapping("/incidents/{id}/priority")
+    public String changePriority(@PathVariable("id") String id, @RequestParam("priority") String priority,
+                                 @RequestParam(name = "reason", defaultValue = "") String reason,
+                                 RedirectAttributes redirect) {
+        try {
+            Incident updated = workflow.changePriority(id, Priority.valueOf(priority), reason);
+            redirect.addFlashAttribute("message", id + " is now " + updated.getPriority() + ".");
+        } catch (InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", "Unknown incident or priority");
+        }
+        return "redirect:/admin/incidents";
     }
 
     /** Exception only: close a resolved incident without waiting for the employee (reason required). */
@@ -175,7 +209,7 @@ public class AdminController {
     // ---------------------------------------------------------------- audit log
 
     /** One row of the audit log page. */
-    public record AuditRow(String time, String actor, String action, String entity, String details) {}
+    public record AuditRow(String time, String actor, String action, String entity, String details, String change) {}
 
     private static final java.time.format.DateTimeFormatter AUDIT_TIME =
             java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss", java.util.Locale.ENGLISH)
@@ -187,7 +221,9 @@ public class AdminController {
         String query = q.trim();
         List<AuditRow> rows = auditLogs.findAllByOrderByOccurredAtDesc().stream()
                 .map(a -> new AuditRow(AUDIT_TIME.format(a.getOccurredAt()), a.getActor(), a.getAction(),
-                        a.getEntityType() + " " + a.getEntityId(), a.getDetails()))
+                        a.getEntityType() + " " + a.getEntityId(), a.getDetails(),
+                        a.getNewState() == null ? "" : (a.getPreviousState() == null ? "(new)" : a.getPreviousState())
+                                + " → " + a.getNewState()))
                 .filter(r -> query.isEmpty() || containsIgnoreCase(r.actor(), query) || containsIgnoreCase(r.action(), query)
                         || containsIgnoreCase(r.entity(), query) || containsIgnoreCase(r.details(), query))
                 .limit(300)
@@ -282,13 +318,22 @@ public class AdminController {
         model.addAttribute("reopened", reopened);
         model.addAttribute("attention", all.stream()
                 .filter(v -> v.open() && (v.sla().equals("VIOLATED") || v.sla().equals("AT_RISK")
-                        || !v.escalation().isEmpty() || reopened.contains(v.id())))
+                        || !v.escalation().isEmpty() || reopened.contains(v.id())
+                        || (v.technicianId().isEmpty() && !v.linked())))
                 .sorted(Comparator.comparing((IncidentView v) -> attentionRank(v, reopened)))
                 .limit(8)
                 .toList());
         model.addAttribute("avgRating", conversation.averageRating()
                 .map(r -> String.format(java.util.Locale.ENGLISH, "%.1f", r)).orElse("-"));
         model.addAttribute("ratingCount", conversation.feedbackCount());
+        // Service analysis: incidents per IT service (all time, open, SLA violations)
+        model.addAttribute("serviceRows", serviceCatalog.all().stream()
+                .map(svc -> new ServiceRow(svc.getName(), svc.getCriticality(),
+                        count(all, v -> svc.getName().equals(v.serviceName())),
+                        count(all, v -> svc.getName().equals(v.serviceName()) && v.open()),
+                        count(all, v -> svc.getName().equals(v.serviceName()) && v.sla().equals("VIOLATED"))))
+                .sorted(Comparator.comparing(ServiceRow::total).reversed())
+                .toList());
         model.addAttribute("refreshedAt", java.time.LocalTime.now().withNano(0).toString());
 
         model.addAttribute("total", total);
@@ -307,7 +352,7 @@ public class AdminController {
     /** Lower = more urgent: violated, escalated, reopened by the employee, then at risk. */
     private static int attentionRank(IncidentView v, java.util.Set<String> reopened) {
         if (v.sla().equals("VIOLATED")) return 0;
-        if (!v.escalation().isEmpty()) return 1;
+        if (!v.escalation().isEmpty() || v.technicianId().isEmpty()) return 1;   // escalated or unassigned
         if (reopened.contains(v.id())) return 2;
         return 3;   // at risk
     }
@@ -332,6 +377,16 @@ public class AdminController {
     private static Bar bar(String label, int count, int total) {
         int percent = total == 0 ? 0 : Math.round(count * 100f / total);
         return new Bar(label, count, percent);
+    }
+
+    /** yyyy-MM-dd from a date input, or null when empty or invalid. */
+    private static java.time.LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return java.time.LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
     }
 
     private static boolean containsIgnoreCase(String text, String part) {

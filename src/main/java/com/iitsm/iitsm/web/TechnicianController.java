@@ -56,6 +56,11 @@ public class TechnicianController {
                         .thenComparing(IncidentView::resolutionDueIso))
                 .toList();
         model.addAttribute("rows", rows);
+        // own workload at a glance (linked reports do not count, they follow their parent)
+        model.addAttribute("activeCount", rows.stream().filter(v -> v.open() && !v.linked()).count());
+        model.addAttribute("atRiskCount", rows.stream().filter(v -> v.open() && v.sla().equals("AT_RISK")).count());
+        model.addAttribute("violatedCount", rows.stream().filter(v -> v.open() && v.sla().equals("VIOLATED")).count());
+        model.addAttribute("doneCount", rows.stream().filter(v -> !v.open()).count());
         return "technician/incidents";
     }
 

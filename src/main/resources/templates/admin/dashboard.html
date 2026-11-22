@@ -70,6 +70,7 @@
                                 <span class="badge text-bg-danger" th:if="${a.open() and !#strings.isEmpty(a.escalation())}"
                                       th:text="'Escalated: ' + ${@labels.escalation(a.escalation())}">Escalated</span>
                                 <span class="badge text-bg-dark" th:if="${reopened.contains(a.id())}">Reopened by employee</span>
+                                <span class="badge text-bg-warning" th:if="${a.technicianId() == ''}">Unassigned (queue)</span>
                             </span>
                         </div>
                         <div class="small text-truncate text-body-secondary" th:text="${a.description()}">Payment app down</div>
@@ -107,6 +108,24 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="page mb-4">
+        <h5 class="mb-3"><i class="bi bi-hdd-network"></i> Service analysis</h5>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Service</th><th>Criticality</th><th>Incidents</th><th>Open</th><th>SLA violations</th></tr></thead>
+                <tbody>
+                <tr th:each="r : ${serviceRows}">
+                    <td><a th:href="@{/admin/incidents(service=${r.name()})}" th:text="${r.name()}">Payment Gateway</a></td>
+                    <td th:text="${r.criticality() == 3} ? 'High' : (${r.criticality() == 2} ? 'Medium' : 'Low')">High</td>
+                    <td th:text="${r.total()}">12</td>
+                    <td th:text="${r.open()}">3</td>
+                    <td><span th:text="${r.violated()}" th:classappend="${r.violated() > 0} ? 'text-danger fw-semibold' : ''">1</span></td>
+                </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 

@@ -17,9 +17,21 @@ public class AuditService {
 
     @Transactional
     public void record(String action, String entityType, String entityId, String details) {
+        auditLogRepository.save(new AuditLogEntity(currentActor(), action, entityType, entityId, details));
+    }
+
+    /** Same, for a state change: previous and new state are stored in their own fields. */
+    @Transactional
+    public void record(String action, String entityType, String entityId, String details,
+                       String previousState, String newState) {
+        auditLogRepository.save(new AuditLogEntity(currentActor(), action, entityType, entityId, details,
+                previousState, newState));
+    }
+
+    /** The logged-in user, or "system" for background jobs. */
+    public static String currentActor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String actor = authentication == null || !authentication.isAuthenticated()
+        return authentication == null || !authentication.isAuthenticated()
                 ? "system" : authentication.getName();
-        auditLogRepository.save(new AuditLogEntity(actor, action, entityType, entityId, details));
     }
 }

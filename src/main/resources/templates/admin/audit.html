@@ -17,14 +17,15 @@
     </div>
     <div class="page p-2 table-responsive">
         <table class="table table-sm table-hover align-middle mb-0">
-            <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th></tr></thead>
+            <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>State change</th><th>Details</th></tr></thead>
             <tbody>
-            <tr th:if="${#lists.isEmpty(rows)}"><td colspan="5" class="text-body-secondary">No matching entries.</td></tr>
+            <tr th:if="${#lists.isEmpty(rows)}"><td colspan="6" class="text-body-secondary">No matching entries.</td></tr>
             <tr th:each="r : ${rows}">
                 <td class="text-nowrap small" th:text="${r.time()}">20 Nov 2026, 10:00:00</td>
                 <td th:text="${r.actor()}">admin</td>
                 <td><code th:text="${r.action()}">INCIDENT_CREATED</code></td>
                 <td class="text-nowrap" th:text="${r.entity()}">INCIDENT INC1001</td>
+                <td class="text-nowrap small" th:text="${r.change()}">ASSIGNED → ACKNOWLEDGED</td>
                 <td class="small" th:text="${r.details()}">details</td>
             </tr>
             </tbody>

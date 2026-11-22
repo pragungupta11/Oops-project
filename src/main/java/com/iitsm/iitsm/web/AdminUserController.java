@@ -84,9 +84,14 @@ public class AdminUserController {
                 "TECHNICIAN", rows.stream().filter(r -> r.role().equals("TECHNICIAN")).count()));
         // open incidents whose technician is unavailable or deactivated: the admin picks a new one
         model.addAttribute("stuck", incidents.findAll().stream()
-                .filter(i -> !i.isFinished() && !i.isLinked() && i.getAssignedTechnician() != null)
-                .filter(i -> { Technician t = techs.get(i.getAssignedTechnician().getId()); return t != null && !t.isAvailable(); })
-                .map(i -> new StuckRow(i.getId(), i.getDescription(), i.getCategory(), i.getAssignedTechnician().getName()))
+                .filter(i -> !i.isFinished() && !i.isLinked())
+                .filter(i -> {
+                    if (i.getAssignedTechnician() == null) return true;   // waiting in the queue
+                    Technician t = techs.get(i.getAssignedTechnician().getId());
+                    return t != null && !t.isAvailable();
+                })
+                .map(i -> new StuckRow(i.getId(), i.getDescription(), i.getCategory(),
+                        i.getAssignedTechnician() == null ? "— (in the queue)" : i.getAssignedTechnician().getName()))
                 .toList());
         model.addAttribute("availableTechs", techs.values().stream()
                 .filter(Technician::isAvailable)
@@ -107,7 +112,7 @@ public class AdminUserController {
         try {
             accounts.createByAdmin(fullName, username, email, password, role, skills);
             redirect.addFlashAttribute("message", "Account '" + username.trim().toLowerCase() + "' created as " + role.toLowerCase()
-                    + ". Share the temporary password with them securely.");
+                    + ". Share the temporary password with them securely." + drainQueue());
         } catch (AccountException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -145,10 +150,17 @@ public class AdminUserController {
         try {
             Incident moved = workflow.handOver(id, technicianId);
             redirect.addFlashAttribute("message", id + " handed over to " + moved.getAssignedTechnician().getName() + ".");
-        } catch (com.iitsm.iitsm.exception.InvalidIncidentDataException | IllegalArgumentException e) {
+        } catch (com.iitsm.iitsm.exception.InvalidIncidentDataException
+                 | com.iitsm.iitsm.exception.TechnicianUnavailableException | IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/admin/users";
+    }
+
+    /** After the admin frees capacity, queued incidents are assigned right away (not only by the job). */
+    private String drainQueue() {
+        int n = workflow.assignQueuedIncidents();
+        return n == 0 ? "" : " " + n + " queued incident(s) were assigned.";
     }
 
     private static String describe(IncidentWorkflowService.HandoverResult r) {
@@ -166,7 +178,7 @@ public class AdminUserController {
                                RedirectAttributes redirect) {
         try {
             accounts.updateSkills(id, skills);
-            redirect.addFlashAttribute("message", "Skills of " + id + " updated.");
+            redirect.addFlashAttribute("message", "Skills of " + id + " updated." + drainQueue());
         } catch (AccountException | IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -178,7 +190,7 @@ public class AdminUserController {
                                   RedirectAttributes redirect) {
         try {
             accounts.setAvailability(id, available);
-            redirect.addFlashAttribute("message", id + (available ? " is available for new incidents."
+            redirect.addFlashAttribute("message", id + (available ? " is available for new incidents." + drainQueue()
                     : " is unavailable: new incidents will go to others."));
         } catch (AccountException | IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());

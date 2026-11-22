@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.iitsm.iitsm.audit.AuditService;
 import com.iitsm.iitsm.exception.InvalidIncidentDataException;
 import com.iitsm.iitsm.exception.TechnicianUnavailableException;
+import com.iitsm.iitsm.exception.TechnicianWorkloadExceededException;
 import com.iitsm.iitsm.factory.IncidentFactory;
 import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.DuplicateMatch;
@@ -45,6 +46,7 @@ public class IncidentWorkflowService {
     private final ApplicationEventPublisher events;
     private final com.iitsm.iitsm.repository.IncidentCommentRepository comments;
     private final int maxReportsPerHour;
+    private final int maxActiveIncidents;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
@@ -55,7 +57,8 @@ public class IncidentWorkflowService {
                                    AuditService audit,
                                    ApplicationEventPublisher events,
                                    com.iitsm.iitsm.repository.IncidentCommentRepository comments,
-                                   @org.springframework.beans.factory.annotation.Value("${app.max-reports-per-hour:5}") int maxReportsPerHour) {
+                                   @org.springframework.beans.factory.annotation.Value("${app.max-reports-per-hour:5}") int maxReportsPerHour,
+                                   @org.springframework.beans.factory.annotation.Value("${app.max-active-incidents:8}") int maxActiveIncidents) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
@@ -66,6 +69,7 @@ public class IncidentWorkflowService {
         this.events = events;
         this.comments = comments;
         this.maxReportsPerHour = maxReportsPerHour;
+        this.maxActiveIncidents = maxActiveIncidents;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -131,12 +135,86 @@ public class IncidentWorkflowService {
                 }
             }
         }
-        ProcessingResult result = processing.process(incident, pool);
+        List<Technician> eligible = underLimit(pool);
+        if (eligible.isEmpty() && pool.size() == 1) {
+            eligible = underLimit(technicians.findAll());   // the routed technician is full: use everyone
+        }
+        ProcessingResult result;
+        try {
+            result = processing.process(incident, eligible);
+        } catch (TechnicianUnavailableException nobodyFits) {
+            // Never lose a report: save it unassigned (status CLASSIFIED) and queue it.
+            Incident saved = incidents.save(incident);
+            String why = whyNobodyFits(incident.getCategory(), technicians.findAll());
+            audit.record("QUEUED_UNASSIGNED", "INCIDENT", saved.getId(), "Waiting for a technician: " + why);
+            events.publishEvent(new IncidentEvent(IncidentEventType.QUEUED, saved));
+            return new ReportOutcome(saved, null, matches);
+        }
 
         technicians.save(result.technician());      // technician first (the incident links to him)
         Incident saved = incidents.save(incident);
         events.publishEvent(new IncidentEvent(IncidentEventType.REPORTED, saved));
         return new ReportOutcome(saved, result, matches);
+    }
+
+    // ------------------------------------------------------------ workload limit and queue
+
+    /** Technicians who are below the maximum number of active incidents. */
+    private List<Technician> underLimit(List<Technician> candidates) {
+        return candidates.stream().filter(t -> t.getActiveIncidents() < maxActiveIncidents).toList();
+    }
+
+    /**
+     * Picks with the active strategy among technicians below the workload limit. If only the
+     * limit stands in the way, throws TechnicianWorkloadExceededException; if nobody has the skill
+     * or is available, TechnicianUnavailableException.
+     */
+    private Technician pickWithinLimit(String category, List<Technician> candidates) {
+        try {
+            return processing.getAssignmentStrategy().pick(category, underLimit(candidates));
+        } catch (TechnicianUnavailableException none) {
+            if (whyNobodyFits(category, candidates).startsWith("all")) {
+                throw new TechnicianWorkloadExceededException(whyNobodyFits(category, candidates));
+            }
+            throw none;
+        }
+    }
+
+    private String whyNobodyFits(String category, List<Technician> candidates) {
+        try {
+            processing.getAssignmentStrategy().pick(category, candidates);   // without the limit
+            return "all technicians who could take it already have " + maxActiveIncidents + " active incidents";
+        } catch (TechnicianUnavailableException e) {
+            return "no available technician has the " + category + " skill";
+        }
+    }
+
+    /**
+     * Assigns queued (unassigned) incidents to technicians who are now free, oldest first.
+     * Called every minute by a job and right after an admin frees capacity.
+     */
+    @Transactional
+    public int assignQueuedIncidents() {
+        int assigned = 0;
+        List<Incident> queued = incidents.findAll().stream()
+                .filter(i -> i.getAssignedTechnician() == null && !i.isLinked() && !i.isFinished()
+                        && i.getStatus() == IncidentStatus.CLASSIFIED)
+                .sorted(java.util.Comparator.comparing(Incident::getCreatedAt))
+                .toList();
+        for (Incident incident : queued) {
+            try {
+                Technician next = pickWithinLimit(incident.getCategory(), technicians.findAll());
+                moveTo(incident, next, "taken from the queue");
+                assigned++;
+            } catch (TechnicianUnavailableException stillNobody) {
+                // stays in the queue
+            }
+        }
+        return assigned;
+    }
+
+    public int maxActiveIncidents() {
+        return maxActiveIncidents;
     }
 
     /** Technician confirms he has seen the incident: ASSIGNED -> ACKNOWLEDGED. */
@@ -215,6 +293,7 @@ public class IncidentWorkflowService {
     public Incident close(String incidentId) {
         Incident incident = incidents.findById(incidentId);
         incident.transitionTo(IncidentStatus.CLOSED);
+        incident.markClosed(AuditService.currentActor());
         Incident saved = saveAndCascade(incident);
         events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
         return saved;
@@ -229,6 +308,7 @@ public class IncidentWorkflowService {
         incident.transitionTo(IncidentStatus.VERIFIED);
         saveAndCascade(incident);
         incident.transitionTo(IncidentStatus.CLOSED);
+        incident.markClosed(employee);
         Incident saved = saveAndCascade(incident);
         audit.record("RESOLUTION_CONFIRMED", "INCIDENT", incidentId, employee + " confirmed the fix works");
         events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
@@ -297,6 +377,7 @@ public class IncidentWorkflowService {
             saveAndCascade(incident);
         }
         incident.transitionTo(IncidentStatus.CLOSED);   // throws if it was not resolved/verified
+        incident.markClosed(AuditService.currentActor());
         Incident saved = saveAndCascade(incident);
         audit.record("CLOSED_BY_ADMIN", "INCIDENT", incidentId, "Closed without the employee's confirmation: " + reason.trim());
         events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
@@ -317,6 +398,7 @@ public class IncidentWorkflowService {
             incident.transitionTo(IncidentStatus.VERIFIED);
             saveAndCascade(incident);
             incident.transitionTo(IncidentStatus.CLOSED);
+            incident.markClosed("system (auto-close)");
             Incident saved = saveAndCascade(incident);
             audit.record("AUTO_CLOSED", "INCIDENT", incident.getId(),
                     "Closed automatically: no answer from the employee since " + incident.getResolvedAt());
@@ -338,6 +420,35 @@ public class IncidentWorkflowService {
             throw new InvalidIncidentDataException("Only a resolved incident can be confirmed or reopened");
         }
         return incident;
+    }
+
+    // ------------------------------------------------------------ priority change
+
+    /**
+     * Admin changes the priority of an open incident (e.g. the impact turned out bigger or smaller).
+     * Deadlines follow the new priority automatically; the SLA alert memory is reset so the monitor
+     * re-evaluates against the new targets.
+     */
+    @Transactional
+    public Incident changePriority(String incidentId, com.iitsm.iitsm.model.Priority newPriority, String reason) {
+        if (newPriority == null) throw new InvalidIncidentDataException("Choose a priority");
+        if (reason == null || reason.isBlank()) throw new InvalidIncidentDataException("Give a reason for the change");
+        Incident incident = incidents.findById(incidentId);
+        if (incident.isFinished()) {
+            throw new InvalidIncidentDataException("Only open incidents can change priority");
+        }
+        com.iitsm.iitsm.model.Priority old = incident.getPriority();
+        if (old == newPriority) {
+            throw new InvalidIncidentDataException(incidentId + " already has priority " + newPriority);
+        }
+        incident.setPriority(newPriority);
+        incident.setReportedSla(com.iitsm.iitsm.model.AlertType.RESPONSE, com.iitsm.iitsm.model.SlaStatus.OK);
+        incident.setReportedSla(com.iitsm.iitsm.model.AlertType.RESOLUTION, com.iitsm.iitsm.model.SlaStatus.OK);
+        Incident saved = incidents.save(incident);
+        audit.record("PRIORITY_CHANGED", "INCIDENT", incidentId, old + " -> " + newPriority + ": " + reason.trim(),
+                old == null ? null : old.name(), newPriority.name());
+        events.publishEvent(new IncidentEvent(IncidentEventType.PRIORITY_CHANGED, saved));
+        return saved;
     }
 
     // ------------------------------------------------------------ technician unavailable / deactivated
@@ -365,7 +476,7 @@ public class IncidentWorkflowService {
                     .toList();
             Technician next;
             try {
-                next = processing.getAssignmentStrategy().pick(incident.getCategory(), others);
+                next = pickWithinLimit(incident.getCategory(), others);
             } catch (TechnicianUnavailableException e) {
                 notMoved.add(incident.getId());
                 continue;
@@ -393,6 +504,10 @@ public class IncidentWorkflowService {
         if (incident.getAssignedTechnician() != null && incident.getAssignedTechnician().getId().equals(toTechnicianId)) {
             throw new InvalidIncidentDataException("The incident is already with " + target.getName());
         }
+        if (target.getActiveIncidents() >= maxActiveIncidents) {
+            throw new TechnicianWorkloadExceededException(target.getName() + " already has "
+                    + target.getActiveIncidents() + " active incidents (limit " + maxActiveIncidents + ")");
+        }
         return moveTo(incident, target, "chosen by admin");
     }
 
@@ -407,7 +522,8 @@ public class IncidentWorkflowService {
             technicians.save(old);
         }
         incident.setAssignedTechnician(next);
-        if (incident.getStatus() == IncidentStatus.ACKNOWLEDGED || incident.getStatus() == IncidentStatus.IN_PROGRESS) {
+        if (incident.getStatus() == IncidentStatus.ACKNOWLEDGED || incident.getStatus() == IncidentStatus.IN_PROGRESS
+                || incident.getStatus() == IncidentStatus.CLASSIFIED) {
             incident.transitionTo(IncidentStatus.ASSIGNED);   // the new technician must acknowledge it
         }
         Incident saved = saveAndCascade(incident);
@@ -452,7 +568,7 @@ public class IncidentWorkflowService {
             List<Technician> pool = technicians.findAll().stream()
                     .filter(t -> previous == null || !t.getId().equals(previous.getId()))
                     .toList();
-            next = processing.getAssignmentStrategy().pick(newCategory, pool);
+            next = pickWithinLimit(newCategory, pool);
         } else {
             next = technicians.findById(technicianId);
         }
@@ -550,7 +666,7 @@ public class IncidentWorkflowService {
         String formerParent = child.getParentId();
         child.unlink();
 
-        Technician next = processing.getAssignmentStrategy().pick(child.getCategory(), technicians.findAll());
+        Technician next = pickWithinLimit(child.getCategory(), technicians.findAll());
         next.incrementActiveIncidents();
         technicians.save(next);
         child.setAssignedTechnician(next);
@@ -601,6 +717,9 @@ public class IncidentWorkflowService {
             if (next == IncidentStatus.RESOLVED) {
                 child.setResolvedAt(LocalDateTime.now());
                 child.setResolution(parent.getResolution());
+            }
+            if (next == IncidentStatus.CLOSED) {
+                child.markClosed(parent.getClosedBy());
             }
         }
     }

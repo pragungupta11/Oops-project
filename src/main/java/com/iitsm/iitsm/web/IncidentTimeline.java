@@ -90,6 +90,10 @@ public class IncidentTimeline {
                 case "INCIDENT_REOPENED" -> entries.add(new Entry(time,
                         staffView ? "Reopened by the employee" : "Reopened: you reported it is still not fixed",
                         staffView ? details : "", "arrow-counterclockwise", "danger"));
+                case "QUEUED_UNASSIGNED" -> entries.add(new Entry(time, "Waiting in the queue for a technician",
+                        staffView ? details : "", "hourglass", "warning"));
+                case "PRIORITY_CHANGED" -> entries.add(new Entry(time, "Priority changed",
+                        staffView ? details : "", "arrow-down-up", "warning"));
                 case "INCIDENT_REASSIGNED" -> entries.add(new Entry(time,
                         staffView ? "Handed over to another technician" : "Your incident has a new technician",
                         staffView ? details : "", "arrow-left-right", "warning"));

@@ -102,6 +102,7 @@ public class EmployeeController {
                             Math.round(m.score() * 100) + "%"))
                     .toList();
             redirect.addFlashAttribute("justCreated", true);
+            redirect.addFlashAttribute("queued", outcome.incident().getAssignedTechnician() == null);
             redirect.addFlashAttribute("duplicates", mine);
             // Redirect so that refreshing the page does not file the same incident twice.
             return "redirect:/employee/incidents/" + outcome.incident().getId();

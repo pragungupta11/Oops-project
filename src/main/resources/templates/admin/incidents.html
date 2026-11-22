@@ -90,6 +90,22 @@
             </select>
         </div>
         <div class="col-md-2">
+            <label class="form-label small mb-0" for="service">Service</label>
+            <select class="form-select form-select-sm" id="service" name="service">
+                <option value="">All</option>
+                <option th:each="svc : ${services}" th:value="${svc.getName()}" th:text="${svc.getName()}"
+                        th:selected="${svc.getName() == selService}"></option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small mb-0" for="from">Reported from</label>
+            <input type="date" class="form-control form-control-sm" id="from" name="from" th:value="${selFrom}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small mb-0" for="to">Reported until</label>
+            <input type="date" class="form-control form-control-sm" id="to" name="to" th:value="${selTo}">
+        </div>
+        <div class="col-md-2">
             <label class="form-label small mb-0" for="keyword">Search text or ID</label>
             <input class="form-control form-control-sm" id="keyword" name="keyword" th:value="${keyword}">
         </div>
@@ -126,6 +142,16 @@
             <td th:text="${i.reporter()}">employee1</td>
             <td th:text="${i.created()}">19 Nov 2026, 10:00</td>
             <td>
+                <form th:if="${i.open() and !i.linked()}" method="post" class="d-flex gap-1 mb-1"
+                      th:action="@{/admin/incidents/{id}/priority(id=${i.id()})}"
+                      onsubmit="const r = prompt('Reason for changing the priority:'); if (!r) return false; this.reason.value = r;">
+                    <select name="priority" class="form-select form-select-sm" style="width: auto;" aria-label="New priority">
+                        <option th:each="p : ${priorities}" th:value="${p.name()}" th:text="${p.name()}"
+                                th:selected="${p.name() == i.priority()}"></option>
+                    </select>
+                    <input type="hidden" name="reason">
+                    <button type="submit" class="btn btn-outline-primary btn-sm" title="Change priority">Set</button>
+                </form>
                 <span class="small text-body-secondary" th:if="${i.status() == 'RESOLVED' and !i.linked()}">
                     <i class="bi bi-hourglass"></i> waiting for employee
                 </span>

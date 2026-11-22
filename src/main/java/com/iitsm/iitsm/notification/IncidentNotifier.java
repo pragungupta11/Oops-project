@@ -55,11 +55,27 @@ public class IncidentNotifier implements SlaAlertListener, EscalationListener {
                             "The admin approved your re-routing request; " + id + " is now with " + techName + ".", id);
                 }
             }
+            case PRIORITY_CHANGED -> {
+                send(tech, id + " is now " + i.getPriority(), "The priority of " + id + " was changed to "
+                        + i.getPriority() + " (" + urgency(i) + "). The SLA deadlines changed with it.", id);
+                send(employee, id + " urgency updated", "The urgency of your incident was updated to "
+                        + urgency(i) + ".", id);
+            }
+            case QUEUED -> {
+                send(employee, id + " received",
+                        "We received your report \"" + brief(i) + "\". All suitable technicians are busy right now, "
+                                + "so it is in the queue and will be assigned automatically as soon as someone is free.", id);
+                sendAll(notifications.adminUsernames(), id + " waiting for a technician",
+                        id + " (" + i.getCategory() + ", " + i.getPriority() + ") could not be assigned automatically. "
+                                + "Assign it on the Users page or free up capacity.", id);
+            }
             case REASSIGNED -> {
-                send(employee, id + " has a new technician",
-                        "Your incident is now handled by " + techName + " because the previous technician is unavailable.", id);
-                send(tech, id + " assigned to you",
-                        id + " was handed over to you because its technician is unavailable: " + brief(i), id);
+                boolean fromQueue = event.previousTechnicianId() == null;
+                send(employee, id + (fromQueue ? " assigned" : " has a new technician"),
+                        "Your incident is now handled by " + techName
+                                + (fromQueue ? "." : " because the previous technician is unavailable."), id);
+                send(tech, id + " assigned to you", id + (fromQueue ? " was assigned to you from the queue: "
+                        : " was handed over to you because its technician is unavailable: ") + brief(i), id);
             }
             case LINKED -> send(employee, id + " is part of a known issue",
                     "Our team confirmed your report is part of an issue that is already being worked on. "

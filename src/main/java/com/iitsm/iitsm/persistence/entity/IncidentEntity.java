@@ -82,6 +82,11 @@ public class IncidentEntity {
     private Integer suggestedMatchPercent;
 
     /** Last SLA state the monitor reported, so alerts are not repeated after a restart. */
+    private LocalDateTime closedAt;
+
+    @Column(length = 80)
+    private String closedBy;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     private SlaStatus reportedResponseSla;
@@ -125,6 +130,8 @@ public class IncidentEntity {
         entity.parentId = incident.getParentId();
         entity.suggestedParentId = incident.getSuggestedParentId();
         entity.suggestedMatchPercent = incident.getSuggestedMatchPercent();
+        entity.closedAt = incident.getClosedAt();
+        entity.closedBy = incident.getClosedBy();
         entity.reportedResponseSla = incident.getReportedSla(AlertType.RESPONSE);
         entity.reportedResolutionSla = incident.getReportedSla(AlertType.RESOLUTION);
         return entity;
@@ -145,6 +152,7 @@ public class IncidentEntity {
         }
         incident.restoreReassignmentRequest(requestedCategory, reassignmentReason);
         incident.restoreDuplicateState(parentId, suggestedParentId, suggestedMatchPercent);
+        incident.restoreClosure(closedAt, closedBy);
         incident.setReportedSla(AlertType.RESPONSE, reportedResponseSla);
         incident.setReportedSla(AlertType.RESOLUTION, reportedResolutionSla);
         return incident;

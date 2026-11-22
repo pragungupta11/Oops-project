@@ -32,6 +32,13 @@ public class AuditLogEntity {
     @Column(nullable = false)
     private Instant occurredAt;
 
+    /** State before and after the action (e.g. ASSIGNED -> ACKNOWLEDGED); empty when not a state change. */
+    @Column(length = 40)
+    private String previousState;
+
+    @Column(length = 40)
+    private String newState;
+
     protected AuditLogEntity() { }
 
     public AuditLogEntity(String actor, String action, String entityType, String entityId, String details) {
@@ -44,6 +51,13 @@ public class AuditLogEntity {
         this.occurredAt = Instant.now();
     }
 
+    public AuditLogEntity(String actor, String action, String entityType, String entityId, String details,
+                          String previousState, String newState) {
+        this(actor, action, entityType, entityId, details);
+        this.previousState = previousState;
+        this.newState = newState;
+    }
+
     public String getId() { return id; }
     public String getActor() { return actor; }
     public String getAction() { return action; }
@@ -51,4 +65,6 @@ public class AuditLogEntity {
     public String getEntityId() { return entityId; }
     public String getDetails() { return details; }
     public Instant getOccurredAt() { return occurredAt; }
+    public String getPreviousState() { return previousState; }
+    public String getNewState() { return newState; }
 }

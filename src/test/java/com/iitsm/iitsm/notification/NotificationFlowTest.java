@@ -23,7 +23,7 @@ import com.iitsm.iitsm.service.SlaMonitorJob;
 import com.iitsm.iitsm.web.IncidentWorkflowService;
 
 @SpringBootTest
-@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:notificationflowtest", "app.max-reports-per-hour=1000"})
+@TestPropertySource(properties = {"spring.datasource.url=jdbc:h2:mem:notificationflowtest", "app.max-reports-per-hour=1000", "app.max-active-incidents=1000"})
 class NotificationFlowTest {
 
     @Autowired IncidentWorkflowService workflow;

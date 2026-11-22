@@ -48,9 +48,10 @@
     </div>
 
     <div class="page border border-warning mb-4" th:unless="${#lists.isEmpty(stuck)}">
-        <h5 class="mb-1"><i class="bi bi-exclamation-triangle text-warning"></i> Waiting for a new technician</h5>
+        <h5 class="mb-1"><i class="bi bi-exclamation-triangle text-warning"></i> Waiting for a technician</h5>
         <p class="small text-body-secondary">
-            These open incidents belong to a technician who is unavailable or deactivated. Choose who takes over
+            Open incidents that are in the queue (nobody suitable was free) or whose technician is unavailable.
+            They are assigned automatically when someone becomes free, or choose who takes over now
             (tip: if nobody has the skill, add it to someone first, or hand it to the closest match).
         </p>
         <div class="table-responsive">

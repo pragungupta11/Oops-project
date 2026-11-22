@@ -10,9 +10,14 @@
         <i class="bi bi-question-circle"></i>
         <strong>Your technician needs more information.</strong> Please answer in the conversation below.
     </div>
-    <div class="alert alert-success" th:if="${justCreated}">
+    <div class="alert alert-success" th:if="${justCreated and !queued}">
         <i class="bi bi-check-circle"></i>
         Your incident was reported. It was classified and assigned to a technician automatically.
+    </div>
+    <div class="alert alert-info" th:if="${justCreated and queued}">
+        <i class="bi bi-hourglass-split"></i>
+        Your incident was reported. All suitable technicians are busy right now, so it is <strong>in the queue</strong>
+        and will be assigned automatically as soon as someone is free. Our admins have been notified.
     </div>
     <div class="alert alert-warning" th:if="${duplicates != null and !#lists.isEmpty(duplicates)}">
         <strong><i class="bi bi-files"></i> You already reported something similar:</strong>
@@ -57,6 +62,7 @@
             <dt class="col-sm-4">Reported</dt><dd class="col-sm-8" th:text="${incident.created()}"></dd>
             <dt class="col-sm-4">Expected resolution by</dt><dd class="col-sm-8" th:text="${incident.resolutionDue()}"></dd>
             <dt class="col-sm-4">Resolution</dt><dd class="col-sm-8" th:text="${incident.resolution()}"></dd>
+        <dt class="col-sm-4" th:if="${incident.closed() != '-'}">Closed</dt><dd class="col-sm-8" th:if="${incident.closed() != '-'}" th:text="${incident.closed()}"></dd>
         </dl>
 
         <!-- the employee confirms the fix or reopens it -->
