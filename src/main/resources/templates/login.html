@@ -28,6 +28,9 @@
             <div class="alert alert-danger py-2" th:if="${param.error}">
                 <i class="bi bi-exclamation-triangle"></i> Wrong username or password.
             </div>
+            <div class="alert alert-warning py-2" th:if="${param.expired}">
+                <i class="bi bi-clock-history"></i> Your session expired. Please sign in again.
+            </div>
             <div class="alert alert-warning py-2" th:if="${param.deactivated}">
                 <i class="bi bi-person-x"></i> Your account has been deactivated. Please contact the IT administrator.
             </div>

@@ -8,6 +8,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
+import org.springframework.security.web.csrf.CsrfException;
 
 @Configuration
 @EnableMethodSecurity
@@ -34,6 +37,23 @@ public class SecurityConfiguration {
                         .anyRequest().authenticated())
                 .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/", true).permitAll())
                 .logout(Customizer.withDefaults())
+                .exceptionHandling(ex -> ex.accessDeniedHandler(staleFormHandler()))
                 .build();
+    }
+
+    /**
+     * A form whose CSRF token has expired (page left open across a restart or a session timeout)
+     * is sent back to the login page with a message instead of the generic "no access" page.
+     * Every other access-denied case keeps the normal 403 page.
+     */
+    private AccessDeniedHandler staleFormHandler() {
+        AccessDeniedHandler fallback = new AccessDeniedHandlerImpl();
+        return (request, response, exception) -> {
+            if (exception instanceof CsrfException) {
+                response.sendRedirect(request.getContextPath() + "/login?expired");
+            } else {
+                fallback.handle(request, response, exception);
+            }
+        };
     }
 }
