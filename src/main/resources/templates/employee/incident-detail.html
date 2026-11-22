@@ -42,7 +42,8 @@
             <span class="badge fs-6" th:classappend="${incident.statusClass()}"
                   th:text="${@labels.status(incident.status())}">Assigned</span>
         </div>
-        <p class="text-body-secondary mb-0" th:text="${incident.description()}">Payment app down</p>
+        <h5 class="mb-1" th:text="${incident.subject()}">Payment app down</h5>
+        <p class="text-body-secondary mb-0" style="white-space: pre-line;" th:text="${incident.description()}">Details</p>
 
         <!-- progress tracker, like parcel tracking -->
         <div class="tracker" th:with="step=${incident.trackerStep()}">

@@ -85,12 +85,13 @@ public class EmployeeController {
 
     @GetMapping("/report")
     public String reportForm(Model model) {
-        fillForm(model, "", categories.activeNames().get(0), 2, 2, catalog.all().get(0).getName());
+        fillForm(model, "", "", categories.activeNames().get(0), 2, 2, "");
         return "employee/report";
     }
 
     @PostMapping("/report")
-    public String submit(@RequestParam("description") String description,
+    public String submit(@RequestParam(name = "subject", defaultValue = "") String subject,
+                         @RequestParam("description") String description,
                          @RequestParam("category") String category,
                          @RequestParam("impact") int impact,
                          @RequestParam("urgency") int urgency,
@@ -100,7 +101,7 @@ public class EmployeeController {
                          RedirectAttributes redirect) {
         try {
             IncidentWorkflowService.ReportOutcome outcome = workflow.report(
-                    authentication.getName(), description, category,
+                    authentication.getName(), subject, description, category,
                     impact, urgency, serviceName);
 
             String me = authentication.getName();
@@ -116,7 +117,7 @@ public class EmployeeController {
             return "redirect:/employee/incidents/" + outcome.incident().getId();
         } catch (InvalidIncidentDataException | TechnicianUnavailableException | IllegalArgumentException e) {
             model.addAttribute("error", e.getMessage());
-            fillForm(model, description, category, impact, urgency, serviceName);
+            fillForm(model, subject, description, category, impact, urgency, serviceName);
             return "employee/report";
         }
     }
@@ -222,8 +223,9 @@ public class EmployeeController {
         return "employee/incident-detail";
     }
 
-    private void fillForm(Model model, String description, String category,
+    private void fillForm(Model model, String subject, String description, String category,
                           int impact, int urgency, String serviceName) {
+        model.addAttribute("subject", subject);
         model.addAttribute("categories", categories.activeNames());
         model.addAttribute("services", catalog.all());
         model.addAttribute("description", description);

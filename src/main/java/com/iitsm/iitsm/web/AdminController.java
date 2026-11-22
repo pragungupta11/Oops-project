@@ -136,7 +136,8 @@ public class AdminController {
                 .filter(v -> category.isBlank() || category.equalsIgnoreCase(v.category()))
                 .filter(v -> technicianId.isBlank() || v.technicianId().equals(technicianId))
                 .filter(v -> slaStatus.isBlank() || v.sla().equals(slaStatus))
-                .filter(v -> kw.isEmpty() || containsIgnoreCase(v.description(), kw) || containsIgnoreCase(v.id(), kw))
+                .filter(v -> kw.isEmpty() || containsIgnoreCase(v.subject(), kw) || containsIgnoreCase(v.description(), kw)
+                        || containsIgnoreCase(v.id(), kw))
                 .toList();
 
         // 50 per page, newest first

@@ -51,7 +51,10 @@ Usernames are case-insensitive.
 
 **Employee**
 - Sign up with a company e-mail address (accounts are always Employee accounts).
-- Report an incident; the category is suggested automatically while typing.
+- Report an incident with a short subject and a description; the category is suggested automatically
+  while typing. Not sure which service is affected? Choose "I don't know": the system identifies it
+  from the text (or uses "Not specified", medium criticality) and the technician can correct it,
+  which recalculates the priority.
 - Track own incidents: progress tracker, technician, expected resolution time, history.
 - Add information, answer the technician's questions, confirm the fix or reopen it ("still broken"),
   and rate the service (1-5 stars).

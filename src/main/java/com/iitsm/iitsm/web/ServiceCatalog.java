@@ -59,10 +59,45 @@ public class ServiceCatalog {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown service: " + name));
     }
 
+    /** Used when the employee does not know the service and the system cannot tell: medium criticality. */
+    public static final String NOT_SPECIFIED = "Not specified";
+
+    /** Words too general to identify a service on their own (e.g. "portal" fits two services). */
+    private static final Set<String> GENERIC = Set.of("portal", "service", "system", "app", "application", "the");
+
+    /**
+     * "I don't know" support: guesses the service from the employee's words by looking for the
+     * distinctive words of each active service's name ("payment" -> Payment Gateway, "vpn" -> VPN).
+     * Returns nothing when no service or more than one fits equally well.
+     */
+    public java.util.Optional<ItService> guessFromText(String text) {
+        if (text == null || text.isBlank()) return java.util.Optional.empty();
+        Set<String> words = new java.util.HashSet<>(java.util.Arrays.asList(
+                text.toLowerCase().replace("e-mail", "email").split("[^a-z0-9]+")));
+        ItService best = null;
+        int bestScore = 0;
+        boolean tie = false;
+        for (ItService svc : all()) {
+            int score = 0;
+            for (String w : svc.getName().toLowerCase().split("[^a-z0-9]+")) {
+                if (w.length() >= 2 && !GENERIC.contains(w) && (words.contains(w) || words.contains(w + "s"))) score++;
+            }
+            if (score > bestScore) { best = svc; bestScore = score; tie = false; }
+            else if (score > 0 && score == bestScore) tie = true;
+        }
+        return best == null || tie ? java.util.Optional.empty() : java.util.Optional.of(best);
+    }
+
+    /** The placeholder service when nothing better is known. */
+    public ItService notSpecified() {
+        return new ItService(NOT_SPECIFIED, 2, Set.of());
+    }
+
     @Transactional
     public void add(String name, int criticality, Set<String> dependsOn) {
         String n = name == null ? "" : name.trim();
         if (n.length() < 2 || n.length() > 60) throw new CatalogException("Service name: 2-60 characters");
+        if (n.equalsIgnoreCase(NOT_SPECIFIED)) throw new CatalogException("\"" + NOT_SPECIFIED + "\" is reserved");
         if (entities().stream().anyMatch(s -> s.getName().equalsIgnoreCase(n))) {
             throw new CatalogException("A service called " + n + " already exists");
         }

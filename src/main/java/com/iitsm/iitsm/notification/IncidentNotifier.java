@@ -150,7 +150,7 @@ public class IncidentNotifier implements SlaAlertListener, EscalationListener {
     }
 
     private static String brief(Incident i) {
-        String d = i.getDescription();
+        String d = i.getSubject();
         return d == null ? "" : (d.length() > 80 ? d.substring(0, 77) + "..." : d);
     }
 

@@ -37,18 +37,21 @@ public class TechnicianController {
     private final IncidentTimeline timeline;
     private final IncidentConversationService conversation;
     private final CategoryCatalog categories;
+    private final ServiceCatalog serviceCatalog;
 
     public TechnicianController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                                 SlaService slaService,
                                 IncidentTimeline timeline,
                                 IncidentConversationService conversation,
-                                CategoryCatalog categories) {
+                                CategoryCatalog categories,
+                                ServiceCatalog serviceCatalog) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.slaService = slaService;
         this.timeline = timeline;
         this.conversation = conversation;
         this.categories = categories;
+        this.serviceCatalog = serviceCatalog;
     }
 
     /** The suspected original incident, shown next to the "Link" / "Not the same" buttons. */
@@ -80,6 +83,7 @@ public class TechnicianController {
         }
         model.addAttribute("incident", IncidentView.of(incident, slaService));
         model.addAttribute("categories", categories.activeNames());
+        model.addAttribute("services", serviceCatalog.all());
         model.addAttribute("history", timeline.forIncident(incident.getId(), true));
         model.addAttribute("thread", conversation.thread(incident.getId(), true));
         model.addAttribute("awaitingInfo", conversation.isAwaitingInfo(incident.getId()));
@@ -159,6 +163,22 @@ public class TechnicianController {
     }
 
     /** Wrong category: ask the admin to re-route this incident to the right kind of technician. */
+    /** Correct the affected service (e.g. the employee chose "I don't know"); priority is recalculated. */
+    @PostMapping("/incidents/{id}/service")
+    public String changeService(@PathVariable("id") String id, @RequestParam("serviceName") String serviceName,
+                                Authentication authentication, RedirectAttributes redirect) {
+        try {
+            Incident updated = workflow.changeService(id, serviceName, authentication.getName());
+            redirect.addFlashAttribute("message", "Affected service set to " + updated.getServiceName()
+                    + "; priority is " + updated.getPriority() + ".");
+        } catch (InvalidStateTransitionException | InvalidIncidentDataException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", "Unknown service: " + serviceName);
+        }
+        return "redirect:/technician/incidents/" + id;
+    }
+
     @PostMapping("/incidents/{id}/reassign")
     public String requestReassignment(@PathVariable("id") String id,
                                       @RequestParam("category") String category,

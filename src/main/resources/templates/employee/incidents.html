@@ -24,7 +24,7 @@
                 <tr th:each="i : ${rows}">
                     <td><a th:href="@{/employee/incidents/{id}(id=${i.id()})}" th:text="${i.id()}">INC1001</a></td>
                     <td>
-                        <div class="text-truncate" style="max-width: 280px;" th:text="${i.description()}">Payment app down</div>
+                        <div class="text-truncate" style="max-width: 280px;" th:text="${i.subject()}">Payment app down</div>
                         <div class="small text-body-secondary" th:text="${i.category()} + ' · ' + ${i.serviceName()}">Network · VPN</div>
                     </td>
                     <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.urgencyLabel()}">High</span></td>

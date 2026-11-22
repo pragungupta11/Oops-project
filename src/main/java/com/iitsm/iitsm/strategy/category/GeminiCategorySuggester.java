@@ -100,7 +100,8 @@ public class GeminiCategorySuggester implements RemoteCategorySuggester {
                 cache.put(cacheKey, answer);
             }
         }
-        return answer.map(c -> new CategorySuggestion(c, "AI (Gemini)", "classified by " + model));
+        // employees only see "by AI"; which model is used is shown to admins on the dashboard
+        return answer.map(c -> new CategorySuggestion(c, "AI", ""));
     }
 
     /** One call to Gemini; any problem becomes "no answer" (logged), never an error for the user. */

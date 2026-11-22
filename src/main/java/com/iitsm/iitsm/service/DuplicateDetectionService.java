@@ -27,7 +27,7 @@ public class DuplicateDetectionService {
             if (other.getId().equals(candidate.getId())) continue;
             if (isFinished(other)) continue;
 
-            double score = similarity.score(candidate.getDescription(), other.getDescription());
+            double score = similarity.score(textOf(candidate), textOf(other));
             if (score >= THRESHOLD) {
                 matches.add(new DuplicateMatch(other, score));
             }
@@ -41,5 +41,10 @@ public class DuplicateDetectionService {
         return s == IncidentStatus.RESOLVED
                 || s == IncidentStatus.VERIFIED
                 || s == IncidentStatus.CLOSED;
+    }
+
+    /** Subject and description together (older incidents' subject is derived from the description). */
+    private static String textOf(Incident incident) {
+        return incident.getSubject() + " " + (incident.getDescription() == null ? "" : incident.getDescription());
     }
 }

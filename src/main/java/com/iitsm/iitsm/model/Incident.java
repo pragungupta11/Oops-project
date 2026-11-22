@@ -14,7 +14,7 @@ public class Incident {
     private String category;
     private final int impact;
     private final int urgency;
-    private final int criticality;
+    private int criticality;          // from the affected service; changes if the service is corrected
     private final LocalDateTime createdAt;
 
     private Priority priority;
@@ -31,6 +31,7 @@ public class Incident {
     private String resolution;
     private String reporterUsername;
     private String serviceName;
+    private String subject;           // short title shown in lists; the description holds the details
 
     // Re-routing: a technician says the category is wrong; an admin approves or rejects.
     private static final Set<IncidentStatus> REROUTABLE = EnumSet.of(
@@ -277,5 +278,38 @@ public class Incident {
     public void restoreClosure(LocalDateTime closedAt, String closedBy) {
         this.closedAt = closedAt;
         this.closedBy = closedBy;
+    }
+
+    // ------------------------------------------------------------ subject and affected service
+
+    static final int MAX_SUBJECT = 120;
+
+    /** The short title. Older incidents without one show the start of their description. */
+    public String getSubject() {
+        if (subject != null && !subject.isBlank()) return subject;
+        String d = description == null ? "" : description.trim();
+        return d.length() <= 80 ? d : d.substring(0, 77) + "...";
+    }
+
+    /** Sets the subject (null = derive it from the description). */
+    public void setSubject(String subject) {
+        if (subject != null && subject.trim().length() > MAX_SUBJECT) {
+            throw new InvalidIncidentDataException("Subject must be at most " + MAX_SUBJECT + " characters");
+        }
+        this.subject = subject == null || subject.isBlank() ? null : subject.trim();
+    }
+
+    /** The stored subject only (no fallback), for saving. */
+    public String getStoredSubject() {
+        return subject;
+    }
+
+    /** Corrects the affected service; its business criticality comes with it. */
+    public void changeAffectedService(String name, int newCriticality) {
+        if (name == null || name.isBlank()) throw new InvalidIncidentDataException("Choose a service");
+        if (newCriticality < 1 || newCriticality > 3) throw new InvalidIncidentDataException("Criticality must be 1 to 3");
+        if (isFinished()) throw new InvalidIncidentDataException("Only open incidents can change service");
+        this.serviceName = name;
+        this.criticality = newCriticality;
     }
 }

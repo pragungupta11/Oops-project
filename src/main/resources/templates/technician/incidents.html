@@ -45,7 +45,7 @@
                         <span class="badge text-bg-danger" th:if="${!#strings.isEmpty(i.escalation())}"
                               th:text="'Escalated: ' + ${@labels.escalation(i.escalation())}">Escalated</span>
                     </div>
-                    <div class="text-truncate" style="max-width: 560px;" th:text="${i.description()}">Payment app down</div>
+                    <div class="text-truncate" style="max-width: 560px;" th:text="${i.subject()}">Payment app down</div>
                     <div class="small text-body-secondary" th:text="${i.category()} + ' · ' + ${i.serviceName()} + ' · reported ' + ${i.created()}">
                         Network · VPN</div>
                 </div>

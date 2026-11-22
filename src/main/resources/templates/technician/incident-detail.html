@@ -19,9 +19,21 @@
     </div>
 
     <dl class="row">
-        <dt class="col-sm-3">Description</dt><dd class="col-sm-9" th:text="${incident.description()}"></dd>
+        <dt class="col-sm-3">Subject</dt><dd class="col-sm-9 fw-semibold" th:text="${incident.subject()}"></dd>
+        <dt class="col-sm-3">Description</dt><dd class="col-sm-9" style="white-space: pre-line;" th:text="${incident.description()}"></dd>
         <dt class="col-sm-3">Category</dt><dd class="col-sm-9" th:text="${incident.category()}"></dd>
-        <dt class="col-sm-3">Affected service</dt><dd class="col-sm-9" th:text="${incident.serviceName()}"></dd>
+        <dt class="col-sm-3">Affected service</dt>
+        <dd class="col-sm-9">
+            <span th:text="${incident.serviceName()}">Customer Portal</span>
+            <form th:if="${incident.open() and !incident.linked()}" method="post" class="d-inline-flex gap-2 ms-2 align-middle"
+                  th:action="@{/technician/incidents/{id}/service(id=${incident.id()})}">
+                <select name="serviceName" class="form-select form-select-sm" style="width: auto;" aria-label="Correct the affected service">
+                    <option th:each="svc : ${services}" th:value="${svc.getName()}" th:text="${svc.getName()}"
+                            th:selected="${svc.getName() == incident.serviceName()}"></option>
+                </select>
+                <button type="submit" class="btn btn-outline-primary btn-sm" title="The priority is recalculated">Correct</button>
+            </form>
+        </dd>
         <dt class="col-sm-3">Reported by</dt><dd class="col-sm-9" th:text="${incident.reporter()}"></dd>
         <dt class="col-sm-3">Reported</dt><dd class="col-sm-9" th:text="${incident.created()}"></dd>
         <dt class="col-sm-3">Respond by</dt><dd class="col-sm-9" th:text="${incident.responseDue()}"></dd>

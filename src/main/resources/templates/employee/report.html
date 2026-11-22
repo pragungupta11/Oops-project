@@ -11,9 +11,15 @@
 
     <form th:action="@{/employee/report}" method="post">
         <div class="mb-3">
+            <label for="subject" class="form-label">Subject</label>
+            <input id="subject" name="subject" class="form-control" maxlength="120" required
+                   placeholder="A short title, e.g. Payment app is down" th:value="${subject}">
+        </div>
+        <div class="mb-3">
             <label for="description" class="form-label">What went wrong?</label>
-            <textarea id="description" name="description" class="form-control" rows="4"
-                      maxlength="2000" required th:text="${description}"></textarea>
+            <textarea id="description" name="description" class="form-control" rows="4" maxlength="2000" required
+                      placeholder="Details: what you see, error messages, since when, who is affected"
+                      th:text="${description}"></textarea>
         </div>
 
         <div class="row">
@@ -28,9 +34,11 @@
             <div class="col-md-6 mb-3">
                 <label for="serviceName" class="form-label">Affected service</label>
                 <select id="serviceName" name="serviceName" class="form-select">
+                    <option value="" th:selected="${serviceName == null or serviceName == ''}">I don't know</option>
                     <option th:each="s : ${services}" th:value="${s.getName()}" th:text="${s.getName()}"
                             th:selected="${s.getName() == serviceName}"></option>
                 </select>
+                <div class="form-text">Not sure? Leave "I don't know": we work it out from your description.</div>
             </div>
         </div>
 
@@ -64,6 +72,7 @@
     (function () {
         const url = /*[[@{/employee/suggest-category}]]*/ '/employee/suggest-category';
         const description = document.getElementById('description');
+        const subject = document.getElementById('subject');
         const category = document.getElementById('category');
         const hint = document.getElementById('category-hint');
         let chosenByUser = false;
@@ -71,23 +80,25 @@
 
         category.addEventListener('change', () => { chosenByUser = true; });
 
-        description.addEventListener('input', () => {
+        const onType = () => {
             clearTimeout(timer);
             timer = setTimeout(async () => {
-                const text = description.value.trim();
+                const text = (subject.value + ' ' + description.value).trim();
                 if (text.length < 8) { hint.textContent = ''; return; }
                 try {
                     const response = await fetch(url + '?description=' + encodeURIComponent(text));
                     if (response.status !== 200) { hint.textContent = ''; return; }
                     const s = await response.json();
                     if (!chosenByUser) category.value = s.category;
-                    hint.textContent = '\u2728 Suggested: ' + s.label + ' (by ' + s.source + '; ' + s.reason + ')'
+                    hint.textContent = '\u2728 Suggested: ' + s.label + ' (by ' + s.source + (s.reason ? '; ' + s.reason : '') + ')'
                         + (chosenByUser && category.value !== s.category ? ' - you chose differently, that is fine.' : '');
                 } catch (e) {
                     hint.textContent = '';   // suggestions are optional; never block the form
                 }
             }, 500);
-        });
+        };
+        subject.addEventListener('input', onType);
+        description.addEventListener('input', onType);
     })();
 </script>
 </body>

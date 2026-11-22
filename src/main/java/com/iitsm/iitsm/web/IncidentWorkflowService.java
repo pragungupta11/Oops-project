@@ -113,16 +113,45 @@ public class IncidentWorkflowService {
         return report(username, description, category.label(), impact, urgency, serviceName);
     }
 
-    /** Same, with the category by name (works for categories the admin added). */
+    /** Same, with the category by name (works for categories the admin added); subject derived. */
     @Transactional
     public ReportOutcome report(String username, String description, String categoryName,
                                 int impact, int urgency, String serviceName) {
+        return doReport(username, null, description, categoryName, impact, urgency, serviceName);
+    }
+
+    /**
+     * The employee's report form: a short subject plus a description. serviceName may be empty
+     * ("I don't know"): the system then guesses the service from the text, or uses "Not specified".
+     */
+    @Transactional
+    public ReportOutcome report(String username, String subject, String description, String categoryName,
+                                int impact, int urgency, String serviceName) {
+        if (subject == null || subject.isBlank()) {
+            throw new InvalidIncidentDataException("Please enter a subject (a short title for the problem)");
+        }
+        return doReport(username, subject, description, categoryName, impact, urgency, serviceName);
+    }
+
+    private ReportOutcome doReport(String username, String subject, String description, String categoryName,
+                                   int impact, int urgency, String serviceName) {
         String category = categories.require(categoryName);
         if (description != null && description.length() > MAX_DESCRIPTION) {
             throw new InvalidIncidentDataException("Description must be at most " + MAX_DESCRIPTION + " characters");
         }
         User reporter = new Employee(username, username, username + "@company.com", "General");
-        ItService service = catalog.byName(serviceName);
+        String serviceNote = null;
+        ItService service;
+        if (serviceName == null || serviceName.isBlank()) {
+            // "I don't know": the system identifies the service from the text, or uses a neutral placeholder
+            String text = (subject == null ? "" : subject + " ") + (description == null ? "" : description);
+            service = catalog.guessFromText(text).orElse(catalog.notSpecified());
+            serviceNote = service.getName().equals(ServiceCatalog.NOT_SPECIFIED)
+                    ? "Employee did not know the service and the system could not tell; set to Not specified"
+                    : "Employee did not know the service; identified from the description as " + service.getName();
+        } else {
+            service = catalog.byName(serviceName);
+        }
 
         // Guardrail against floods of fake reports from one account.
         LocalDateTime hourAgo = LocalDateTime.now().minusHours(1);
@@ -142,6 +171,7 @@ public class IncidentWorkflowService {
         } while (incidents.exists(incident.getId()));
         incident.setReporterUsername(username);
         incident.setServiceName(service.getName());
+        incident.setSubject(subject);
 
         List<Incident> existing = incidents.findOpen();   // only open incidents can be duplicates
         List<DuplicateMatch> matches = duplicateDetection.findPossibleDuplicates(incident, existing);
@@ -178,8 +208,46 @@ public class IncidentWorkflowService {
 
         technicians.save(result.technician());      // technician first (the incident links to him)
         Incident saved = incidents.save(incident);
+        if (serviceNote != null) {
+            audit.record("SERVICE_IDENTIFIED", "INCIDENT", saved.getId(), serviceNote);
+        }
         events.publishEvent(new IncidentEvent(IncidentEventType.REPORTED, saved));
         return new ReportOutcome(saved, result, matches);
+    }
+
+    /**
+     * Technician (or admin, technicianId null) corrects the affected service, e.g. after "I don't know".
+     * The service's criticality comes with it, so the priority is recalculated with the active
+     * strategy; if it changes, SLA deadlines follow and technician and employee are notified.
+     */
+    @Transactional
+    public Incident changeService(String incidentId, String serviceName, String technicianId) {
+        Incident incident = technicianId == null ? incidents.findById(incidentId)
+                                                 : ops.loadAssignedTo(incidentId, technicianId);
+        IncidentOperations.requireNotLinked(incident);
+        ItService service = catalog.byName(serviceName);   // unknown or inactive -> IllegalArgumentException
+        String oldService = incident.getServiceName();
+        if (service.getName().equals(oldService)) {
+            throw new InvalidIncidentDataException(incidentId + " is already set to " + oldService);
+        }
+        Priority oldPriority = incident.getPriority();
+        incident.changeAffectedService(service.getName(), service.getCriticality());
+        Priority newPriority = processing.getPriorityStrategy()
+                .calculate(incident.getImpact(), incident.getUrgency(), incident.getCriticality());
+        boolean priorityChanged = newPriority != oldPriority;
+        if (priorityChanged) {
+            incident.setPriority(newPriority);
+            incident.setReportedSla(AlertType.RESPONSE, SlaStatus.OK);
+            incident.setReportedSla(AlertType.RESOLUTION, SlaStatus.OK);
+        }
+        Incident saved = incidents.save(incident);
+        audit.record("SERVICE_CHANGED", "INCIDENT", incidentId, "Affected service " + oldService + " -> "
+                + service.getName() + (priorityChanged ? "; priority " + oldPriority + " -> " + newPriority : ""),
+                oldService, service.getName());
+        if (priorityChanged) {
+            events.publishEvent(new IncidentEvent(IncidentEventType.PRIORITY_CHANGED, saved));
+        }
+        return saved;
     }
 
     /** Technician confirms he has seen the incident: ASSIGNED -> ACKNOWLEDGED. */

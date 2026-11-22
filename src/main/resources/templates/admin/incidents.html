@@ -121,7 +121,7 @@
     <table class="table table-hover table-sm align-middle mb-0">
         <thead>
         <tr>
-            <th>ID</th><th>Description</th><th>Category</th><th>Service</th><th>Priority</th>
+            <th>ID</th><th>Subject</th><th>Category</th><th>Service</th><th>Priority</th>
             <th>Status</th><th>SLA</th><th>Technician</th><th>Reporter</th><th>Reported</th><th>Action</th>
         </tr>
         </thead>
@@ -129,8 +129,8 @@
         <tr th:each="i : ${rows}">
             <td><span th:text="${i.id()}">INC1001</span>
                 <div class="small text-muted" th:if="${i.linked()}" th:text="'linked to ' + ${i.parentId()}">linked to INC1001</div></td>
-            <td class="text-truncate" style="max-width: 220px;" th:text="${i.description()}"
-                th:title="${i.description()}">Description</td>
+            <td class="text-truncate" style="max-width: 220px;" th:text="${i.subject()}"
+                th:title="${i.description()}">Subject</td>
             <td th:text="${i.category()}">Network</td>
             <td th:text="${i.serviceName()}">VPN</td>
             <td><span class="badge" th:classappend="${i.priorityClass()}" th:text="${i.priority()}">P2</span></td>
