@@ -9,6 +9,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.iitsm.iitsm.exception.AccountException;
 import com.iitsm.iitsm.security.UserAccountService;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /** Public self sign-up. Always creates an EMPLOYEE: no role is accepted from the browser. */
 @Controller
@@ -33,14 +36,14 @@ public class RegistrationController {
                            @RequestParam(name = "confirm", required = false) String confirm,
                            Model model, RedirectAttributes redirect) {
         // First: every empty field, all at once, so the user sees everything that is missing.
-        java.util.List<String> missing = new java.util.ArrayList<>();
+        List<String> missing = new ArrayList<>();
         if (fullName == null || fullName.isBlank()) missing.add("fullName");
         if (email == null || email.isBlank()) missing.add("email");
         if (username == null || username.isBlank()) missing.add("username");
         if (password == null || password.isEmpty()) missing.add("password");
         if (confirm == null || confirm.isEmpty()) missing.add("confirm");
         if (!missing.isEmpty()) {
-            java.util.Map<String, String> names = java.util.Map.of("fullName", "Full name", "email", "Company e-mail",
+            Map<String, String> names = Map.of("fullName", "Full name", "email", "Company e-mail",
                     "username", "Username", "password", "Password", "confirm", "Confirm password");
             model.addAttribute("error", "Please fill in the required field" + (missing.size() > 1 ? "s" : "") + ": "
                     + String.join(", ", missing.stream().map(names::get).toList()) + ".");
@@ -52,12 +55,12 @@ public class RegistrationController {
             return "redirect:/login";
         } catch (AccountException e) {
             model.addAttribute("error", e.getMessage());
-            return showAgain(model, java.util.List.of(), fullName, username, email);
+            return showAgain(model, List.of(), fullName, username, email);
         }
     }
 
     /** Shows the form again with what was typed (never the passwords) and the empty fields marked. */
-    private String showAgain(Model model, java.util.List<String> missing, String fullName, String username, String email) {
+    private String showAgain(Model model, List<String> missing, String fullName, String username, String email) {
         model.addAttribute("missing", missing);
         model.addAttribute("fullName", fullName);
         model.addAttribute("username", username);

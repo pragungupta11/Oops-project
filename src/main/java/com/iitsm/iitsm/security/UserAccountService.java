@@ -16,6 +16,8 @@ import com.iitsm.iitsm.model.Technician;
 import com.iitsm.iitsm.persistence.entity.AppUserEntity;
 import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.repository.AppUserRepository;
+import com.iitsm.iitsm.service.CategoryCatalog;
+import java.util.List;
 
 /**
  * All account rules in one place.
@@ -40,12 +42,12 @@ public class UserAccountService {
     private final AuditService auditService;
     private final TechnicianPersistenceService technicians;
     private final String emailDomain;
-    private final com.iitsm.iitsm.service.CategoryCatalog categories;
+    private final CategoryCatalog categories;
 
     public UserAccountService(AppUserRepository userRepository, PasswordEncoder passwordEncoder,
                               AuditService auditService, TechnicianPersistenceService technicians,
                               @Value("${app.signup-email-domain:company.com}") String emailDomain,
-                              com.iitsm.iitsm.service.CategoryCatalog categories) {
+                              CategoryCatalog categories) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
@@ -201,7 +203,7 @@ public class UserAccountService {
     }
 
     /** Skills a technician can have = the active categories. */
-    public java.util.List<String> skillNames() {
+    public List<String> skillNames() {
         return categories.activeNames();
     }
 

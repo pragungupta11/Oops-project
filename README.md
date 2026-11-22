@@ -120,7 +120,17 @@ Layered architecture: Thymeleaf pages and controllers (`web`) → services and s
 | `observer`, `notification` | SLA/escalation listeners and incident events → notification channels (Observer pattern) |
 | `repository`, `persistence` | Spring Data repositories and JPA entities (Repository pattern) |
 | `security` | Login, roles, account rules, deactivation check |
-| `web` | Controllers, view models, the incident workflow used by the pages, error handling |
+| `web` | Controllers, view models, error handling, and the incident use-case services (below) |
+
+The pages talk to one **facade**, `IncidentWorkflowService` (reporting and the core lifecycle), which
+delegates specialised use cases to focused services: `TechnicianHandoverService` (queue, workload,
+handover), `ResolutionService` (employee confirmation, reopen, auto-close, admin close),
+`ReroutingService` and `DuplicateLinkingService`. Rules they share (picking within the workload
+limit, moving an incident, keeping linked reports in step) live in `IncidentOperations`.
+
+Design patterns: **State** (lifecycle), **Strategy** (priority, assignment, similarity, category
+suggestion), **Observer** (SLA alerts, escalations and incident events → notifications), **Factory**
+(incident creation), **Repository** (persistence), **Facade** (the workflow service).
 
 Notifications go through every `NotificationChannel`: **in-app** (bell icon) and **simulated e-mail**
 (an outbox the admin can read, addressed to each user's registered e-mail). Adding a channel is one
@@ -166,4 +176,3 @@ isolated: a failing channel is logged and skipped, and the incident action still
   lockout after repeated wrong passwords; no REST API.
 - Two reports of the same problem in the same second do not see each other as duplicates.
 - Removing a technician's skill does not move their open incidents of that category (the admin can).
-- `IncidentWorkflowService` coordinates many use cases; splitting it further is planned.

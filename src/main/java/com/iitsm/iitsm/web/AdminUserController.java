@@ -29,6 +29,9 @@ import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.repository.AppUserRepository;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.security.UserAccountService;
+import com.iitsm.iitsm.exception.InvalidIncidentDataException;
+import com.iitsm.iitsm.exception.TechnicianUnavailableException;
+import com.iitsm.iitsm.persistence.entity.AppUserEntity;
 
 /** Admin: create accounts (incl. technicians with skills), deactivate, manage technicians. */
 @Controller
@@ -66,7 +69,7 @@ public class AdminUserController {
         Map<String, Technician> techs = technicians.findAll().stream()
                 .collect(Collectors.toMap(Technician::getId, Function.identity()));
         List<UserRow> rows = users.findAll().stream()
-                .sorted(Comparator.comparing((com.iitsm.iitsm.persistence.entity.AppUserEntity u) -> u.getRole())
+                .sorted(Comparator.comparing((AppUserEntity u) -> u.getRole())
                         .thenComparing(u -> u.getUsername()))
                 .map(u -> {
                     Technician t = techs.get(u.getUsername());
@@ -151,8 +154,8 @@ public class AdminUserController {
         try {
             Incident moved = workflow.handOver(id, technicianId);
             redirect.addFlashAttribute("message", id + " handed over to " + moved.getAssignedTechnician().getName() + ".");
-        } catch (com.iitsm.iitsm.exception.InvalidIncidentDataException
-                 | com.iitsm.iitsm.exception.TechnicianUnavailableException | IllegalArgumentException e) {
+        } catch (InvalidIncidentDataException
+                 | TechnicianUnavailableException | IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/admin/users";

@@ -24,6 +24,11 @@ import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.service.SlaService;
 import com.iitsm.iitsm.strategy.category.CategorySuggester;
+import com.iitsm.iitsm.exception.InvalidStateTransitionException;
+import com.iitsm.iitsm.model.IncidentStatus;
+import com.iitsm.iitsm.service.AutoCloseJob;
+import com.iitsm.iitsm.service.CategoryCatalog;
+import java.time.Duration;
 
 @Controller
 @RequestMapping("/employee")
@@ -31,20 +36,20 @@ public class EmployeeController {
     private final IncidentWorkflowService workflow;
     private final IncidentPersistenceService incidents;
     private final ServiceCatalog catalog;
-    private final com.iitsm.iitsm.service.CategoryCatalog categories;
+    private final CategoryCatalog categories;
     private final SlaService slaService;
     private final CategorySuggester categorySuggester;
     private final IncidentTimeline timeline;
     private final IncidentConversationService conversation;
-    private final com.iitsm.iitsm.service.AutoCloseJob autoClose;
+    private final AutoCloseJob autoClose;
 
     public EmployeeController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                               ServiceCatalog catalog, SlaService slaService,
                               CategorySuggester categorySuggester,
                               IncidentTimeline timeline,
                               IncidentConversationService conversation,
-                              com.iitsm.iitsm.service.AutoCloseJob autoClose,
-                              com.iitsm.iitsm.service.CategoryCatalog categories) {
+                              AutoCloseJob autoClose,
+                              CategoryCatalog categories) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.catalog = catalog;
@@ -132,7 +137,7 @@ public class EmployeeController {
         try {
             workflow.confirmResolution(id, authentication.getName());
             redirect.addFlashAttribute("message", "Great, glad it is fixed! The incident is now closed.");
-        } catch (InvalidIncidentDataException | com.iitsm.iitsm.exception.InvalidStateTransitionException e) {
+        } catch (InvalidIncidentDataException | InvalidStateTransitionException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
@@ -147,7 +152,7 @@ public class EmployeeController {
         try {
             workflow.reopen(id, authentication.getName(), reason);
             redirect.addFlashAttribute("message", "Sorry about that. The incident is back with your technician.");
-        } catch (InvalidIncidentDataException | com.iitsm.iitsm.exception.InvalidStateTransitionException e) {
+        } catch (InvalidIncidentDataException | InvalidStateTransitionException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found");
@@ -155,9 +160,9 @@ public class EmployeeController {
         return "redirect:/employee/incidents/" + id;
     }
 
-    private static String readable(java.time.Duration d) {
+    private static String readable(Duration d) {
         long days = d.toDays();
-        if (days >= 1 && d.equals(java.time.Duration.ofDays(days))) return days + (days == 1 ? " day" : " days");
+        if (days >= 1 && d.equals(Duration.ofDays(days))) return days + (days == 1 ? " day" : " days");
         long hours = d.toHours();
         if (hours >= 1) return hours + (hours == 1 ? " hour" : " hours");
         return d.toMinutes() + " minutes";
@@ -210,10 +215,10 @@ public class EmployeeController {
         model.addAttribute("thread", conversation.thread(incident.getId(), false));
         model.addAttribute("awaitingInfo", conversation.isAwaitingInfo(incident.getId()));
         model.addAttribute("feedback", conversation.feedbackFor(incident.getId()).orElse(null));
-        model.addAttribute("canConfirm", incident.getStatus() == com.iitsm.iitsm.model.IncidentStatus.RESOLVED
+        model.addAttribute("canConfirm", incident.getStatus() == IncidentStatus.RESOLVED
                 && !incident.isLinked());
         model.addAttribute("autoCloseText", readable(autoClose.autoCloseAfter()));
-        model.addAttribute("canMessage", incident.getStatus() != com.iitsm.iitsm.model.IncidentStatus.CLOSED);
+        model.addAttribute("canMessage", incident.getStatus() != IncidentStatus.CLOSED);
         return "employee/incident-detail";
     }
 

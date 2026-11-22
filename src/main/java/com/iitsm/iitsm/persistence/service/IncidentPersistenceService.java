@@ -10,6 +10,8 @@ import com.iitsm.iitsm.repository.TechnicianRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.EnumSet;
+import java.util.Set;
 
 @Service
 public class IncidentPersistenceService {
@@ -59,8 +61,8 @@ public class IncidentPersistenceService {
         return incidentRepository.findByStatus(status).stream().map(IncidentEntity::toDomain).toList();
     }
 
-    private static final java.util.Set<IncidentStatus> FINISHED =
-            java.util.EnumSet.of(IncidentStatus.RESOLVED, IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
+    private static final Set<IncidentStatus> FINISHED =
+            EnumSet.of(IncidentStatus.RESOLVED, IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
 
     /** Incidents still being worked on (not resolved, verified or closed). */
     @Transactional(readOnly = true)

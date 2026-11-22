@@ -14,6 +14,9 @@ import com.iitsm.iitsm.model.CategoryInfo;
 import com.iitsm.iitsm.persistence.entity.IncidentCategoryEntity;
 import com.iitsm.iitsm.repository.IncidentCategoryRepository;
 import com.iitsm.iitsm.strategy.category.KeywordCategorySuggester;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Incident categories, configured by the admin and stored in the database. Seeded with the six
@@ -24,18 +27,18 @@ import com.iitsm.iitsm.strategy.category.KeywordCategorySuggester;
 public class CategoryCatalog {
     private final IncidentCategoryRepository repository;
     private final AuditService audit;
-    private final org.springframework.transaction.support.TransactionTemplate ownTransaction;
+    private final TransactionTemplate ownTransaction;
     private volatile boolean seeded;
 
     public CategoryCatalog(IncidentCategoryRepository repository, AuditService audit,
-                           org.springframework.transaction.PlatformTransactionManager transactions) {
+                           PlatformTransactionManager transactions) {
         this.repository = repository;
         this.audit = audit;
         // Seeding runs in its OWN transaction: if the action that triggered it fails and rolls back,
         // the built-in categories must still be saved.
-        this.ownTransaction = new org.springframework.transaction.support.TransactionTemplate(transactions);
+        this.ownTransaction = new TransactionTemplate(transactions);
         this.ownTransaction.setPropagationBehavior(
-                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /** Built-in categories first (in their usual order), then the admin's own, alphabetically. */

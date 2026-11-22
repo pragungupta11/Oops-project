@@ -2,6 +2,7 @@ package com.iitsm.iitsm.web;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Comparator;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -10,6 +11,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.beans.factory.annotation.Value;
+import com.iitsm.iitsm.model.AlertType;
+import com.iitsm.iitsm.model.Priority;
+import com.iitsm.iitsm.model.SlaStatus;
+import com.iitsm.iitsm.service.CategoryCatalog;
 import com.iitsm.iitsm.audit.AuditService;
 import com.iitsm.iitsm.exception.InvalidIncidentDataException;
 import com.iitsm.iitsm.exception.TechnicianUnavailableException;
@@ -31,7 +37,13 @@ import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.service.DuplicateDetectionService;
 import com.iitsm.iitsm.service.IncidentProcessingService;
 
-/** Glue between the web pages and the backend services: one method per user action. */
+/**
+ * Facade between the web pages and the incident services: one method per user action.
+ * It handles reporting and the core lifecycle itself (report, acknowledge, start, resolve,
+ * verify, close, priority change) and delegates the specialised use cases to focused services:
+ * {@link TechnicianHandoverService}, {@link ResolutionService}, {@link ReroutingService} and
+ * {@link DuplicateLinkingService}. Shared rules live in {@link IncidentOperations}.
+ */
 @Service
 public class IncidentWorkflowService {
     private static final int MAX_DESCRIPTION = 2000;
@@ -44,10 +56,13 @@ public class IncidentWorkflowService {
     private final ServiceCatalog catalog;
     private final AuditService audit;
     private final ApplicationEventPublisher events;
-    private final com.iitsm.iitsm.repository.IncidentCommentRepository comments;
     private final int maxReportsPerHour;
-    private final int maxActiveIncidents;
-    private final com.iitsm.iitsm.service.CategoryCatalog categories;
+    private final CategoryCatalog categories;
+    private final IncidentOperations ops;
+    private final TechnicianHandoverService handover;
+    private final ResolutionService resolutionService;
+    private final ReroutingService rerouting;
+    private final DuplicateLinkingService linking;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
@@ -57,10 +72,13 @@ public class IncidentWorkflowService {
                                    ServiceCatalog catalog,
                                    AuditService audit,
                                    ApplicationEventPublisher events,
-                                   com.iitsm.iitsm.repository.IncidentCommentRepository comments,
-                                   @org.springframework.beans.factory.annotation.Value("${app.max-reports-per-hour:5}") int maxReportsPerHour,
-                                   @org.springframework.beans.factory.annotation.Value("${app.max-active-incidents:8}") int maxActiveIncidents,
-                                   com.iitsm.iitsm.service.CategoryCatalog categories) {
+                                   @Value("${app.max-reports-per-hour:20}") int maxReportsPerHour,
+                                   CategoryCatalog categories,
+                                   IncidentOperations ops,
+                                   TechnicianHandoverService handover,
+                                   ResolutionService resolutionService,
+                                   ReroutingService rerouting,
+                                   DuplicateLinkingService linking) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
@@ -69,10 +87,13 @@ public class IncidentWorkflowService {
         this.catalog = catalog;
         this.audit = audit;
         this.events = events;
-        this.comments = comments;
         this.maxReportsPerHour = maxReportsPerHour;
-        this.maxActiveIncidents = maxActiveIncidents;
         this.categories = categories;
+        this.ops = ops;
+        this.handover = handover;
+        this.resolutionService = resolutionService;
+        this.rerouting = rerouting;
+        this.linking = linking;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -83,11 +104,6 @@ public class IncidentWorkflowService {
      * load balancing wins.
      */
     static final int ROUTING_LOAD_LIMIT = 5;
-
-    private static final List<IncidentStatus> HAPPY_PATH = List.of(
-            IncidentStatus.NEW, IncidentStatus.CLASSIFIED, IncidentStatus.ASSIGNED,
-            IncidentStatus.ACKNOWLEDGED, IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED,
-            IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
 
     /** Employee reports an incident: validate, check duplicates, classify, assign, save. */
     @Transactional
@@ -144,9 +160,9 @@ public class IncidentWorkflowService {
                 }
             }
         }
-        List<Technician> eligible = underLimit(pool);
+        List<Technician> eligible = ops.underLimit(pool);
         if (eligible.isEmpty() && pool.size() == 1) {
-            eligible = underLimit(technicians.findAll());   // the routed technician is full: use everyone
+            eligible = ops.underLimit(technicians.findAll());   // the routed technician is full: use everyone
         }
         ProcessingResult result;
         try {
@@ -154,7 +170,7 @@ public class IncidentWorkflowService {
         } catch (TechnicianUnavailableException nobodyFits) {
             // Never lose a report: save it unassigned (status CLASSIFIED) and queue it.
             Incident saved = incidents.save(incident);
-            String why = whyNobodyFits(incident.getCategory(), technicians.findAll());
+            String why = ops.whyNobodyFits(incident.getCategory(), technicians.findAll());
             audit.record("QUEUED_UNASSIGNED", "INCIDENT", saved.getId(), "Waiting for a technician: " + why);
             events.publishEvent(new IncidentEvent(IncidentEventType.QUEUED, saved));
             return new ReportOutcome(saved, null, matches);
@@ -166,112 +182,26 @@ public class IncidentWorkflowService {
         return new ReportOutcome(saved, result, matches);
     }
 
-    // ------------------------------------------------------------ workload limit and queue
-
-    /** Technicians who are below the maximum number of active incidents. */
-    private List<Technician> underLimit(List<Technician> candidates) {
-        return candidates.stream().filter(t -> t.getActiveIncidents() < maxActiveIncidents).toList();
-    }
-
-    /**
-     * Picks with the active strategy among technicians below the workload limit. If only the
-     * limit stands in the way, throws TechnicianWorkloadExceededException; if nobody has the skill
-     * or is available, TechnicianUnavailableException.
-     */
-    private Technician pickWithinLimit(String category, List<Technician> candidates) {
-        try {
-            return processing.getAssignmentStrategy().pick(category, underLimit(candidates));
-        } catch (TechnicianUnavailableException none) {
-            if (whyNobodyFits(category, candidates).startsWith("all")) {
-                throw new TechnicianWorkloadExceededException(whyNobodyFits(category, candidates));
-            }
-            throw none;
-        }
-    }
-
-    private String whyNobodyFits(String category, List<Technician> candidates) {
-        try {
-            processing.getAssignmentStrategy().pick(category, candidates);   // without the limit
-            return "all technicians who could take it already have " + maxActiveIncidents + " active incidents";
-        } catch (TechnicianUnavailableException e) {
-            return "no available technician has the " + category + " skill";
-        }
-    }
-
-    /**
-     * Assigns queued (unassigned) incidents to technicians who are now free, oldest first.
-     * Called every minute by a job and right after an admin frees capacity.
-     */
-    @Transactional
-    public int assignQueuedIncidents() {
-        int assigned = 0;
-        List<Incident> queued = incidents.findByStatus(IncidentStatus.CLASSIFIED).stream()
-                .filter(i -> i.getAssignedTechnician() == null && !i.isLinked() && !i.isFinished()
-                        && i.getStatus() == IncidentStatus.CLASSIFIED)
-                .sorted(java.util.Comparator.comparing(Incident::getCreatedAt))
-                .toList();
-        for (Incident incident : queued) {
-            try {
-                Technician next = pickWithinLimit(incident.getCategory(), technicians.findAll());
-                moveTo(incident, next, "taken from the queue");
-                assigned++;
-            } catch (TechnicianUnavailableException stillNobody) {
-                // stays in the queue
-            }
-        }
-        return assigned;
-    }
-
-    public int maxActiveIncidents() {
-        return maxActiveIncidents;
-    }
-
-    private static final Set<IncidentStatus> ACTIVE_WORK =
-            java.util.EnumSet.of(IncidentStatus.ASSIGNED, IncidentStatus.ACKNOWLEDGED, IncidentStatus.IN_PROGRESS);
-
-    /**
-     * Self-correction of the stored workload counters: recounts each technician's active incidents
-     * (assigned, acknowledged or in progress; linked reports excluded) and fixes any counter that
-     * drifted, e.g. after two actions at the same moment. Returns how many counters were corrected.
-     */
-    @Transactional
-    public int reconcileWorkload() {
-        java.util.Map<String, Long> actual = incidents.findOpen().stream()
-                .filter(i -> i.getAssignedTechnician() != null && !i.isLinked() && ACTIVE_WORK.contains(i.getStatus()))
-                .collect(Collectors.groupingBy(i -> i.getAssignedTechnician().getId(), Collectors.counting()));
-        int corrected = 0;
-        for (Technician t : technicians.findAll()) {
-            int real = actual.getOrDefault(t.getId(), 0L).intValue();
-            if (t.getActiveIncidents() != real) {
-                technicians.save(new Technician(t.getId(), t.getName(), t.getSkills(), real, t.isAvailable()));
-                audit.record("WORKLOAD_CORRECTED", "TECHNICIAN", t.getId(),
-                        "Active incidents counter " + t.getActiveIncidents() + " -> " + real);
-                corrected++;
-            }
-        }
-        return corrected;
-    }
-
     /** Technician confirms he has seen the incident: ASSIGNED -> ACKNOWLEDGED. */
     @Transactional
     public Incident acknowledge(String incidentId, String technicianId) {
-        Incident incident = loadAssignedTo(incidentId, technicianId);
-        requireNotLinked(incident);
+        Incident incident = ops.loadAssignedTo(incidentId, technicianId);
+        IncidentOperations.requireNotLinked(incident);
         incident.transitionTo(IncidentStatus.ACKNOWLEDGED);
         // Keep the first acknowledgement: after a re-routing the response SLA was already met.
         if (incident.getAcknowledgedAt() == null) {
             incident.setAcknowledgedAt(LocalDateTime.now());
         }
-        return saveAndCascade(incident);
+        return ops.saveAndCascade(incident);
     }
 
     /** Technician starts working: ACKNOWLEDGED -> IN_PROGRESS. */
     @Transactional
     public Incident start(String incidentId, String technicianId) {
-        Incident incident = loadAssignedTo(incidentId, technicianId);
-        requireNotLinked(incident);
+        Incident incident = ops.loadAssignedTo(incidentId, technicianId);
+        IncidentOperations.requireNotLinked(incident);
         incident.transitionTo(IncidentStatus.IN_PROGRESS);
-        return saveAndCascade(incident);
+        return ops.saveAndCascade(incident);
     }
 
     /** Technician finishes: IN_PROGRESS -> RESOLVED, stores the notes and frees one workload slot. */
@@ -283,8 +213,8 @@ public class IncidentWorkflowService {
         if (resolution.length() > MAX_DESCRIPTION) {
             throw new InvalidIncidentDataException("Resolution notes must be at most " + MAX_DESCRIPTION + " characters");
         }
-        Incident incident = loadAssignedTo(incidentId, technicianId);
-        requireNotLinked(incident);
+        Incident incident = ops.loadAssignedTo(incidentId, technicianId);
+        IncidentOperations.requireNotLinked(incident);
         incident.transitionTo(IncidentStatus.RESOLVED);
         incident.setResolvedAt(LocalDateTime.now());
         incident.setResolution(resolution.trim());
@@ -292,27 +222,9 @@ public class IncidentWorkflowService {
         Technician technician = technicians.findById(technicianId);
         technician.decrementActiveIncidents();
         technicians.save(technician);
-        Incident saved = saveAndCascade(incident);
+        Incident saved = ops.saveAndCascade(incident);
         events.publishEvent(new IncidentEvent(IncidentEventType.RESOLVED, saved));
         return saved;
-    }
-
-    /** A linked report follows its parent automatically; work happens on the parent. */
-    private static void requireNotLinked(Incident incident) {
-        if (incident.isLinked()) {
-            throw new InvalidIncidentDataException(incident.getId() + " is linked to " + incident.getParentId()
-                    + "; work on " + incident.getParentId() + " and this report will follow it");
-        }
-    }
-
-    /** Loads an incident and makes sure it belongs to this technician. */
-    private Incident loadAssignedTo(String incidentId, String technicianId) {
-        Incident incident = incidents.findById(incidentId);
-        Technician assigned = incident.getAssignedTechnician();
-        if (assigned == null || !assigned.getId().equals(technicianId)) {
-            throw new AccessDeniedException("This incident is not assigned to you");
-        }
-        return incident;
     }
 
     /** Admin checks the fix: RESOLVED -> VERIFIED. */
@@ -320,7 +232,7 @@ public class IncidentWorkflowService {
     public Incident verify(String incidentId) {
         Incident incident = incidents.findById(incidentId);
         incident.transitionTo(IncidentStatus.VERIFIED);
-        return saveAndCascade(incident);
+        return ops.saveAndCascade(incident);
     }
 
     /** Admin closes the incident: VERIFIED -> CLOSED. */
@@ -329,150 +241,10 @@ public class IncidentWorkflowService {
         Incident incident = incidents.findById(incidentId);
         incident.transitionTo(IncidentStatus.CLOSED);
         incident.markClosed(AuditService.currentActor());
-        Incident saved = saveAndCascade(incident);
+        Incident saved = ops.saveAndCascade(incident);
         events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
         return saved;
     }
-
-    // ------------------------------------------------------------ employee confirms or reopens
-
-    /** The employee confirms the fix works: RESOLVED -> VERIFIED -> CLOSED. */
-    @Transactional
-    public Incident confirmResolution(String incidentId, String employee) {
-        Incident incident = loadResolvedOwnIncident(incidentId, employee);
-        incident.transitionTo(IncidentStatus.VERIFIED);
-        saveAndCascade(incident);
-        incident.transitionTo(IncidentStatus.CLOSED);
-        incident.markClosed(employee);
-        Incident saved = saveAndCascade(incident);
-        audit.record("RESOLUTION_CONFIRMED", "INCIDENT", incidentId, employee + " confirmed the fix works");
-        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
-        return saved;
-    }
-
-    /**
-     * The employee says it is still broken: RESOLVED -> IN_PROGRESS with the same technician,
-     * who gets the workload back. The reason goes into the conversation.
-     */
-    @Transactional
-    public Incident reopen(String incidentId, String employee, String reason) {
-        if (reason == null || reason.isBlank()) {
-            throw new InvalidIncidentDataException("Please tell the technician what is still wrong");
-        }
-        String why = reason.trim();
-        if (why.length() > 1000) {
-            throw new InvalidIncidentDataException("Please keep it under 1000 characters");
-        }
-        Incident incident = loadResolvedOwnIncident(incidentId, employee);
-        String previousFix = incident.getResolution();
-        incident.transitionTo(IncidentStatus.IN_PROGRESS);
-        incident.setResolvedAt(null);
-        incident.setResolution(null);
-
-        Technician tech = incident.getAssignedTechnician();
-        String handedOver = null;
-        if (tech != null) {
-            Technician original = technicians.findById(tech.getId());
-            Technician next = original;
-            if (!original.isAvailable()) {
-                // The original technician left or is on leave: give it to an available skilled one.
-                try {
-                    next = pickWithinLimit(incident.getCategory(), technicians.findAll().stream()
-                            .filter(t -> !t.getId().equals(original.getId())).toList());
-                    incident.setAssignedTechnician(next);
-                    incident.transitionTo(IncidentStatus.ASSIGNED);   // the new technician must acknowledge it
-                    handedOver = next.getId();
-                } catch (TechnicianUnavailableException nobody) {
-                    next = original;   // stays listed under "Waiting for a technician" for the admin
-                }
-            }
-            next.incrementActiveIncidents();
-            technicians.save(next);
-        }
-        Incident saved = incidents.save(incident);
-
-        // linked reports were resolved together with it, so they reopen together too
-        for (Incident child : incidents.findLinkedTo(incidentId)) {
-            if (child.getStatus() == IncidentStatus.RESOLVED) {
-                child.transitionTo(IncidentStatus.IN_PROGRESS);
-                child.setResolvedAt(null);
-                child.setResolution(null);
-                incidents.save(child);
-            }
-        }
-        comments.save(new com.iitsm.iitsm.persistence.entity.IncidentCommentEntity(incidentId, employee, "EMPLOYEE",
-                com.iitsm.iitsm.model.CommentKind.MESSAGE, "Still not fixed: " + why));
-        audit.record("INCIDENT_REOPENED", "INCIDENT", incidentId,
-                "Reopened by " + employee + ": " + why + (previousFix == null ? "" : " (previous fix: " + previousFix + ")")
-                        + (handedOver == null ? "" : "; original technician unavailable, handed over to " + handedOver));
-        events.publishEvent(new IncidentEvent(IncidentEventType.REOPENED, saved));
-        return saved;
-    }
-
-    /**
-     * Admin override for exceptions (dispute, employee unavailable, duplicate): closes a resolved
-     * incident without waiting for the employee. Routine confirmation is the employee's job.
-     */
-    @Transactional
-    public Incident adminClose(String incidentId, String reason) {
-        if (reason == null || reason.isBlank()) {
-            throw new InvalidIncidentDataException("Give a reason for closing without the employee's confirmation");
-        }
-        Incident incident = incidents.findById(incidentId);
-        if (incident.isLinked()) {
-            throw new InvalidIncidentDataException("This report closes together with " + incident.getParentId());
-        }
-        if (incident.getStatus() == IncidentStatus.RESOLVED) {
-            incident.transitionTo(IncidentStatus.VERIFIED);
-            saveAndCascade(incident);
-        }
-        incident.transitionTo(IncidentStatus.CLOSED);   // throws if it was not resolved/verified
-        incident.markClosed(AuditService.currentActor());
-        Incident saved = saveAndCascade(incident);
-        audit.record("CLOSED_BY_ADMIN", "INCIDENT", incidentId, "Closed without the employee's confirmation: " + reason.trim());
-        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
-        return saved;
-    }
-
-    /**
-     * Closes resolved incidents nobody confirmed or reopened since {@code cutoff}.
-     * Linked reports are skipped here: they close together with their parent.
-     */
-    @Transactional
-    public int autoCloseResolvedBefore(LocalDateTime cutoff) {
-        int closed = 0;
-        for (Incident incident : incidents.findByStatus(IncidentStatus.RESOLVED)) {
-            if (incident.isLinked() || incident.getResolvedAt() == null || !incident.getResolvedAt().isBefore(cutoff)) {
-                continue;
-            }
-            incident.transitionTo(IncidentStatus.VERIFIED);
-            saveAndCascade(incident);
-            incident.transitionTo(IncidentStatus.CLOSED);
-            incident.markClosed("system (auto-close)");
-            Incident saved = saveAndCascade(incident);
-            audit.record("AUTO_CLOSED", "INCIDENT", incident.getId(),
-                    "Closed automatically: no answer from the employee since " + incident.getResolvedAt());
-            events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, saved));
-            closed++;
-        }
-        return closed;
-    }
-
-    private Incident loadResolvedOwnIncident(String incidentId, String employee) {
-        Incident incident = incidents.findById(incidentId);
-        if (!employee.equals(incident.getReporterUsername())) {
-            throw new AccessDeniedException("This is not your incident");
-        }
-        if (incident.isLinked()) {
-            throw new InvalidIncidentDataException("This report follows a larger incident and closes together with it");
-        }
-        if (incident.getStatus() != IncidentStatus.RESOLVED) {
-            throw new InvalidIncidentDataException("Only a resolved incident can be confirmed or reopened");
-        }
-        return incident;
-    }
-
-    // ------------------------------------------------------------ priority change
 
     /**
      * Admin changes the priority of an open incident (e.g. the impact turned out bigger or smaller).
@@ -480,7 +252,7 @@ public class IncidentWorkflowService {
      * re-evaluates against the new targets.
      */
     @Transactional
-    public Incident changePriority(String incidentId, com.iitsm.iitsm.model.Priority newPriority, String reason) {
+    public Incident changePriority(String incidentId, Priority newPriority, String reason) {
         if (newPriority == null) throw new InvalidIncidentDataException("Choose a priority");
         if (reason == null || reason.isBlank()) throw new InvalidIncidentDataException("Give a reason for the change");
         Incident incident = incidents.findById(incidentId);
@@ -491,299 +263,18 @@ public class IncidentWorkflowService {
             throw new InvalidIncidentDataException(incidentId + " follows " + incident.getParentId()
                     + "; change the priority of " + incident.getParentId() + " instead");
         }
-        com.iitsm.iitsm.model.Priority old = incident.getPriority();
+        Priority old = incident.getPriority();
         if (old == newPriority) {
             throw new InvalidIncidentDataException(incidentId + " already has priority " + newPriority);
         }
         incident.setPriority(newPriority);
-        incident.setReportedSla(com.iitsm.iitsm.model.AlertType.RESPONSE, com.iitsm.iitsm.model.SlaStatus.OK);
-        incident.setReportedSla(com.iitsm.iitsm.model.AlertType.RESOLUTION, com.iitsm.iitsm.model.SlaStatus.OK);
+        incident.setReportedSla(AlertType.RESPONSE, SlaStatus.OK);
+        incident.setReportedSla(AlertType.RESOLUTION, SlaStatus.OK);
         Incident saved = incidents.save(incident);
         audit.record("PRIORITY_CHANGED", "INCIDENT", incidentId, old + " -> " + newPriority + ": " + reason.trim(),
                 old == null ? null : old.name(), newPriority.name());
         events.publishEvent(new IncidentEvent(IncidentEventType.PRIORITY_CHANGED, saved));
         return saved;
-    }
-
-    // ------------------------------------------------------------ technician unavailable / deactivated
-
-    /** Result of handing over a technician's open incidents. */
-    public record HandoverResult(int moved, List<String> notMoved) {}
-
-    /**
-     * Hands over every open incident of a technician who is unavailable or deactivated to other
-     * available technicians with the right skill (active assignment strategy). Incidents nobody
-     * else can take stay where they are and are reported back to the admin.
-     */
-    @Transactional
-    public HandoverResult reassignOpenIncidentsOf(String technicianId) {
-        int moved = 0;
-        List<String> notMoved = new java.util.ArrayList<>();
-        for (Incident incident : incidents.findByTechnician(technicianId)) {
-            Technician current = incident.getAssignedTechnician();
-            if (current == null || !current.getId().equals(technicianId)
-                    || incident.isLinked() || incident.isFinished()) {
-                continue;
-            }
-            List<Technician> others = technicians.findAll().stream()
-                    .filter(t -> !t.getId().equals(technicianId))
-                    .toList();
-            Technician next;
-            try {
-                next = pickWithinLimit(incident.getCategory(), others);
-            } catch (TechnicianUnavailableException e) {
-                notMoved.add(incident.getId());
-                continue;
-            }
-            moveTo(incident, next, "automatic, matching skill");
-            moved++;
-        }
-        return new HandoverResult(moved, notMoved);
-    }
-
-    /**
-     * Admin hands one open incident to a technician of their choice, e.g. when nobody else has
-     * the skill. The target must be available.
-     */
-    @Transactional
-    public Incident handOver(String incidentId, String toTechnicianId) {
-        Incident incident = incidents.findById(incidentId);
-        if (incident.isLinked() || incident.isFinished()) {
-            throw new InvalidIncidentDataException("Only open, non-linked incidents can be handed over");
-        }
-        Technician target = technicians.findById(toTechnicianId);
-        if (!target.isAvailable()) {
-            throw new InvalidIncidentDataException(target.getName() + " is not available");
-        }
-        if (incident.getAssignedTechnician() != null && incident.getAssignedTechnician().getId().equals(toTechnicianId)) {
-            throw new InvalidIncidentDataException("The incident is already with " + target.getName());
-        }
-        if (target.getActiveIncidents() >= maxActiveIncidents) {
-            throw new TechnicianWorkloadExceededException(target.getName() + " already has "
-                    + target.getActiveIncidents() + " active incidents (limit " + maxActiveIncidents + ")");
-        }
-        return moveTo(incident, target, "chosen by admin");
-    }
-
-    /** Moves an open incident to another technician: workloads, status, audit and notifications. */
-    private Incident moveTo(Incident incident, Technician next, String how) {
-        Technician previous = incident.getAssignedTechnician();
-        next.incrementActiveIncidents();
-        technicians.save(next);
-        if (previous != null) {
-            Technician old = technicians.findById(previous.getId());
-            old.decrementActiveIncidents();
-            technicians.save(old);
-        }
-        incident.setAssignedTechnician(next);
-        if (incident.getStatus() == IncidentStatus.ACKNOWLEDGED || incident.getStatus() == IncidentStatus.IN_PROGRESS
-                || incident.getStatus() == IncidentStatus.CLASSIFIED) {
-            incident.transitionTo(IncidentStatus.ASSIGNED);   // the new technician must acknowledge it
-        }
-        Incident saved = saveAndCascade(incident);
-        audit.record("INCIDENT_REASSIGNED", "INCIDENT", incident.getId(), "Handed over from "
-                + (previous == null ? "-" : previous.getId()) + " to " + next.getId() + " (" + how + ")");
-        events.publishEvent(new IncidentEvent(IncidentEventType.REASSIGNED, saved,
-                previous == null ? null : previous.getId()));
-        return saved;
-    }
-
-    // ------------------------------------------------------------ re-routing (reassignment)
-
-    /** Technician says the category is wrong and asks the admin to re-route the incident. */
-    @Transactional
-    public Incident requestReassignment(String incidentId, String technicianId,
-                                        String correctCategory, String reason) {
-        Incident incident = loadAssignedTo(incidentId, technicianId);
-        String oldCategory = incident.getCategory();
-        incident.requestReassignment(correctCategory, reason);
-        Incident saved = incidents.save(incident);
-        audit.record("REASSIGNMENT_REQUESTED", "INCIDENT", incidentId,
-                "Category " + oldCategory + " -> " + correctCategory + " requested by " + technicianId
-                        + ": " + incident.getReassignmentReason());
-        return saved;
-    }
-
-    /**
-     * Admin approves a re-routing. technicianId "auto" lets the active assignment strategy pick
-     * (excluding the current technician); otherwise the admin's chosen technician is used.
-     */
-    @Transactional
-    public Incident approveReassignment(String incidentId, String technicianId) {
-        Incident incident = incidents.findById(incidentId);
-        if (!incident.hasPendingReassignment()) {
-            throw new InvalidIncidentDataException("There is no re-routing request for " + incidentId);
-        }
-        String newCategory = incident.getRequestedCategory();
-        Technician previous = incident.getAssignedTechnician();
-
-        Technician next;
-        if (technicianId == null || technicianId.isBlank() || technicianId.equals("auto")) {
-            List<Technician> pool = technicians.findAll().stream()
-                    .filter(t -> previous == null || !t.getId().equals(previous.getId()))
-                    .toList();
-            next = pickWithinLimit(newCategory, pool);
-        } else {
-            next = technicians.findById(technicianId);
-        }
-
-        String oldCategory = incident.getCategory();
-        incident.approveReassignment(next);
-
-        if (previous != null && !previous.getId().equals(next.getId())) {
-            Technician old = technicians.findById(previous.getId());
-            old.decrementActiveIncidents();
-            technicians.save(old);
-            next.incrementActiveIncidents();
-            technicians.save(next);
-        }
-        Incident saved = saveAndCascade(incident);
-        events.publishEvent(new IncidentEvent(IncidentEventType.REROUTED, saved,
-                previous == null ? null : previous.getId()));
-        audit.record("REASSIGNMENT_APPROVED", "INCIDENT", incidentId,
-                "Category " + oldCategory + " -> " + newCategory + "; technician "
-                        + (previous == null ? "-" : previous.getId()) + " -> " + next.getId());
-        return saved;
-    }
-
-    /** Admin rejects a re-routing: the incident stays as it was. */
-    @Transactional
-    public Incident rejectReassignment(String incidentId) {
-        Incident incident = incidents.findById(incidentId);
-        String requested = incident.getRequestedCategory();
-        incident.rejectReassignment();
-        Incident saved = incidents.save(incident);
-        audit.record("REASSIGNMENT_REJECTED", "INCIDENT", incidentId,
-                "Request to move to " + requested + " was rejected");
-        return saved;
-    }
-
-    // ------------------------------------------------------------ duplicates (manual linking)
-
-    /** Technician confirms the system's hint: this report is the same problem as the suggested incident. */
-    @Transactional
-    public Incident linkToSuggestedParent(String incidentId, String technicianId) {
-        Incident child = loadAssignedTo(incidentId, technicianId);
-        if (!child.hasDuplicateSuggestion()) {
-            throw new InvalidIncidentDataException("There is no duplicate suggestion for " + incidentId);
-        }
-        boolean hasOwnChildren = !incidents.findLinkedTo(incidentId).isEmpty();
-        if (hasOwnChildren) {
-            throw new InvalidIncidentDataException(incidentId
-                    + " already has linked reports, so it cannot itself be linked to another incident");
-        }
-        Incident parent = incidents.findById(child.getSuggestedParentId());
-        Integer percent = child.getSuggestedMatchPercent();
-        Technician previous = child.getAssignedTechnician();
-
-        child.linkTo(parent);
-
-        // A linked report is the same piece of work as its parent, so it stops counting
-        // towards anyone's workload.
-        Technician old = technicians.findById(previous.getId());
-        old.decrementActiveIncidents();
-        technicians.save(old);
-
-        catchUpWithParent(child, parent);
-        Incident saved = incidents.save(child);
-        events.publishEvent(new IncidentEvent(IncidentEventType.LINKED, saved));
-        audit.record("DUPLICATE_LINKED", "INCIDENT", incidentId,
-                "Linked to " + parent.getId() + " (" + percent + "% match) by " + technicianId
-                        + "; now handled by " + parent.getAssignedTechnician().getId());
-        return saved;
-    }
-
-    /** Technician checked the hint and decided it is a different problem. */
-    @Transactional
-    public Incident dismissDuplicateSuggestion(String incidentId, String technicianId) {
-        Incident incident = loadAssignedTo(incidentId, technicianId);
-        String suggested = incident.getSuggestedParentId();
-        if (suggested == null) {
-            throw new InvalidIncidentDataException("There is no duplicate suggestion for " + incidentId);
-        }
-        incident.dismissDuplicateSuggestion();
-        Incident saved = incidents.save(incident);
-        audit.record("DUPLICATE_DISMISSED", "INCIDENT", incidentId,
-                technicianId + " decided it is not the same problem as " + suggested);
-        return saved;
-    }
-
-    /**
-     * Undo a wrong link. technicianId is the technician doing it, or null for the admin.
-     * The report becomes an independent incident again: normal assignment, it counts towards
-     * workload again, and its own SLA and escalation apply (its clock never stopped).
-     */
-    @Transactional
-    public Incident unlink(String incidentId, String technicianId) {
-        Incident child = technicianId == null ? incidents.findById(incidentId)
-                                              : loadAssignedTo(incidentId, technicianId);
-        String formerParent = child.getParentId();
-        child.unlink();
-
-        Technician next = pickWithinLimit(child.getCategory(), technicians.findAll());
-        next.incrementActiveIncidents();
-        technicians.save(next);
-        child.setAssignedTechnician(next);
-        if (child.getStatus() != IncidentStatus.ASSIGNED) {
-            child.transitionTo(IncidentStatus.ASSIGNED);
-        }
-        child.setAcknowledgedAt(null);   // its new technician must respond to it on its own
-
-        Incident saved = incidents.save(child);
-        events.publishEvent(new IncidentEvent(IncidentEventType.UNLINKED, saved));
-        audit.record("INCIDENT_UNLINKED", "INCIDENT", incidentId,
-                "Unlinked from " + formerParent + " by " + (technicianId == null ? "admin" : technicianId)
-                        + "; assigned to " + next.getId());
-        return saved;
-    }
-
-    /** Saves an incident and brings its linked reports along (same technician, same progress). */
-    private Incident saveAndCascade(Incident parent) {
-        Incident saved = incidents.save(parent);
-        for (Incident child : incidents.findLinkedTo(parent.getId())) {
-            {
-                IncidentStatus before = child.getStatus();
-                child.setAssignedTechnician(parent.getAssignedTechnician());
-                catchUpWithParent(child, parent);
-                Incident savedChild = incidents.save(child);
-                if (before != savedChild.getStatus()) {
-                    if (savedChild.getStatus() == IncidentStatus.RESOLVED) {
-                        events.publishEvent(new IncidentEvent(IncidentEventType.RESOLVED, savedChild));
-                    } else if (savedChild.getStatus() == IncidentStatus.CLOSED) {
-                        events.publishEvent(new IncidentEvent(IncidentEventType.CLOSED, savedChild));
-                    }
-                }
-            }
-        }
-        return saved;
-    }
-
-    /**
-     * Keeps a linked report in step with its parent: forward one legal step at a time, and back to
-     * ASSIGNED when the parent went back there (handover or re-routing to a new technician).
-     */
-    private void catchUpWithParent(Incident child, Incident parent) {
-        if (parent.getStatus() == IncidentStatus.ASSIGNED
-                && (child.getStatus() == IncidentStatus.ACKNOWLEDGED || child.getStatus() == IncidentStatus.IN_PROGRESS)) {
-            child.transitionTo(IncidentStatus.ASSIGNED);   // legal: ACKNOWLEDGED/IN_PROGRESS -> ASSIGNED
-            return;
-        }
-        int target = HAPPY_PATH.indexOf(parent.getStatus());
-        int current = HAPPY_PATH.indexOf(child.getStatus());
-        while (current < target) {
-            IncidentStatus next = HAPPY_PATH.get(++current);
-            child.transitionTo(next);
-            if (next == IncidentStatus.ACKNOWLEDGED && child.getAcknowledgedAt() == null) {
-                child.setAcknowledgedAt(LocalDateTime.now());
-            }
-            if (next == IncidentStatus.RESOLVED) {
-                child.setResolvedAt(LocalDateTime.now());
-                child.setResolution(parent.getResolution());
-            }
-            if (next == IncidentStatus.CLOSED) {
-                child.markClosed(parent.getClosedBy());
-            }
-        }
     }
 
     /** A match may itself be a linked report: the real original is its parent. */
@@ -807,5 +298,70 @@ public class IncidentWorkflowService {
                 .filter(t -> t.getActiveIncidents() < ROUTING_LOAD_LIMIT)
                 .findFirst()
                 .orElse(null);
+    }
+
+    // ---------------------------------------------------------------- delegated use cases
+
+    /** Result of handing over a technician's open incidents. */
+    public record HandoverResult(int moved, List<String> notMoved) {}
+
+    public int maxActiveIncidents() {
+        return ops.maxActiveIncidents();
+    }
+
+    public int assignQueuedIncidents() {
+        return handover.assignQueuedIncidents();
+    }
+
+    public int reconcileWorkload() {
+        return handover.reconcileWorkload();
+    }
+
+    public HandoverResult reassignOpenIncidentsOf(String technicianId) {
+        return handover.reassignOpenIncidentsOf(technicianId);
+    }
+
+    public Incident handOver(String incidentId, String toTechnicianId) {
+        return handover.handOver(incidentId, toTechnicianId);
+    }
+
+    public Incident confirmResolution(String incidentId, String employee) {
+        return resolutionService.confirmResolution(incidentId, employee);
+    }
+
+    public Incident reopen(String incidentId, String employee, String reason) {
+        return resolutionService.reopen(incidentId, employee, reason);
+    }
+
+    public Incident adminClose(String incidentId, String reason) {
+        return resolutionService.adminClose(incidentId, reason);
+    }
+
+    public int autoCloseResolvedBefore(LocalDateTime cutoff) {
+        return resolutionService.autoCloseResolvedBefore(cutoff);
+    }
+
+    public Incident requestReassignment(String incidentId, String technicianId, String correctCategory, String reason) {
+        return rerouting.requestReassignment(incidentId, technicianId, correctCategory, reason);
+    }
+
+    public Incident approveReassignment(String incidentId, String technicianId) {
+        return rerouting.approveReassignment(incidentId, technicianId);
+    }
+
+    public Incident rejectReassignment(String incidentId) {
+        return rerouting.rejectReassignment(incidentId);
+    }
+
+    public Incident linkToSuggestedParent(String incidentId, String technicianId) {
+        return linking.linkToSuggestedParent(incidentId, technicianId);
+    }
+
+    public Incident dismissDuplicateSuggestion(String incidentId, String technicianId) {
+        return linking.dismissDuplicateSuggestion(incidentId, technicianId);
+    }
+
+    public Incident unlink(String incidentId, String technicianId) {
+        return linking.unlink(incidentId, technicianId);
     }
 }

@@ -15,6 +15,9 @@ import com.iitsm.iitsm.exception.CatalogException;
 import com.iitsm.iitsm.model.ItService;
 import com.iitsm.iitsm.persistence.entity.ItServiceEntity;
 import com.iitsm.iitsm.repository.ItServiceRepository;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * The IT services an incident can affect (criticality 1 = low, 3 = high), managed by the admin and
@@ -24,17 +27,17 @@ import com.iitsm.iitsm.repository.ItServiceRepository;
 public class ServiceCatalog {
     private final ItServiceRepository repository;
     private final AuditService audit;
-    private final org.springframework.transaction.support.TransactionTemplate ownTransaction;
+    private final TransactionTemplate ownTransaction;
     private volatile boolean seeded;
 
     public ServiceCatalog(ItServiceRepository repository, AuditService audit,
-                          org.springframework.transaction.PlatformTransactionManager transactions) {
+                          PlatformTransactionManager transactions) {
         this.repository = repository;
         this.audit = audit;
         // Seeding runs in its OWN transaction, so a failing action cannot roll the defaults back.
-        this.ownTransaction = new org.springframework.transaction.support.TransactionTemplate(transactions);
+        this.ownTransaction = new TransactionTemplate(transactions);
         this.ownTransaction.setPropagationBehavior(
-                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /** Active services, by name (offered when reporting). */

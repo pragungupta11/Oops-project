@@ -21,6 +21,11 @@ import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.service.SlaService;
+import com.iitsm.iitsm.exception.TechnicianUnavailableException;
+import com.iitsm.iitsm.model.CommentKind;
+import com.iitsm.iitsm.service.CategoryCatalog;
+import java.time.Duration;
+import java.time.LocalDateTime;
 
 /** Technician pages. A technician's login username is also his Technician id. */
 @Controller
@@ -31,13 +36,13 @@ public class TechnicianController {
     private final SlaService slaService;
     private final IncidentTimeline timeline;
     private final IncidentConversationService conversation;
-    private final com.iitsm.iitsm.service.CategoryCatalog categories;
+    private final CategoryCatalog categories;
 
     public TechnicianController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                                 SlaService slaService,
                                 IncidentTimeline timeline,
                                 IncidentConversationService conversation,
-                                com.iitsm.iitsm.service.CategoryCatalog categories) {
+                                CategoryCatalog categories) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.slaService = slaService;
@@ -83,9 +88,9 @@ public class TechnicianController {
         // Acknowledging late is allowed (work must continue), but the technician should know.
         long minutesLate = 0;
         if (incident.getAcknowledgedAt() == null && incident.getPriority() != null) {
-            java.time.LocalDateTime due = slaService.responseDeadline(incident.getCreatedAt(), incident.getPriority(), incident.getServiceName());
-            if (java.time.LocalDateTime.now().isAfter(due)) {
-                minutesLate = Math.max(1, java.time.Duration.between(due, java.time.LocalDateTime.now()).toMinutes());
+            LocalDateTime due = slaService.responseDeadline(incident.getCreatedAt(), incident.getPriority(), incident.getServiceName());
+            if (LocalDateTime.now().isAfter(due)) {
+                minutesLate = Math.max(1, Duration.between(due, LocalDateTime.now()).toMinutes());
             }
         }
         model.addAttribute("responseMinutesLate", minutesLate);
@@ -210,7 +215,7 @@ public class TechnicianController {
             redirect.addFlashAttribute("message", id + " is a separate incident again and was assigned to "
                     + unlinked.getAssignedTechnician().getName() + ".");
         } catch (InvalidStateTransitionException | InvalidIncidentDataException
-                 | com.iitsm.iitsm.exception.TechnicianUnavailableException e) {
+                 | TechnicianUnavailableException e) {
             redirect.addFlashAttribute("error", e.getMessage());
             return "redirect:/technician/incidents/" + id;
         } catch (IllegalArgumentException e) {
@@ -224,9 +229,9 @@ public class TechnicianController {
     public String addComment(@PathVariable("id") String id, @RequestParam("kind") String kind,
                              @RequestParam("text") String text,
                              Authentication authentication, RedirectAttributes redirect) {
-        com.iitsm.iitsm.model.CommentKind k;
+        CommentKind k;
         try {
-            k = com.iitsm.iitsm.model.CommentKind.valueOf(kind);
+            k = CommentKind.valueOf(kind);
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", "Choose what kind of entry this is");
             return "redirect:/technician/incidents/" + id;

@@ -13,6 +13,11 @@ import com.iitsm.iitsm.exception.InvalidSlaConfigurationException;
 import com.iitsm.iitsm.model.Priority;
 import com.iitsm.iitsm.model.SlaPolicy;
 import com.iitsm.iitsm.persistence.service.SlaPolicyPersistenceService;
+import com.iitsm.iitsm.audit.AuditService;
+import com.iitsm.iitsm.persistence.entity.ServiceSlaPolicyEntity;
+import com.iitsm.iitsm.repository.ServiceSlaPolicyRepository;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Admin-configurable SLA policies. The database is the source of truth; SlaService keeps a
@@ -25,12 +30,12 @@ public class SlaConfigurationService {
 
     private final SlaService slaService;
     private final SlaPolicyPersistenceService store;
-    private final com.iitsm.iitsm.repository.ServiceSlaPolicyRepository serviceStore;
-    private final com.iitsm.iitsm.audit.AuditService audit;
+    private final ServiceSlaPolicyRepository serviceStore;
+    private final AuditService audit;
 
     public SlaConfigurationService(SlaService slaService, SlaPolicyPersistenceService store,
-                                   com.iitsm.iitsm.repository.ServiceSlaPolicyRepository serviceStore,
-                                   com.iitsm.iitsm.audit.AuditService audit) {
+                                   ServiceSlaPolicyRepository serviceStore,
+                                   AuditService audit) {
         this.slaService = slaService;
         this.store = store;
         this.serviceStore = serviceStore;
@@ -46,10 +51,10 @@ public class SlaConfigurationService {
     }
 
     /** All service-specific SLAs (for the admin page). */
-    public java.util.List<com.iitsm.iitsm.persistence.entity.ServiceSlaPolicyEntity> serviceOverrides() {
+    public List<ServiceSlaPolicyEntity> serviceOverrides() {
         return serviceStore.findAll().stream()
-                .sorted(java.util.Comparator.comparing(com.iitsm.iitsm.persistence.entity.ServiceSlaPolicyEntity::getServiceName)
-                        .thenComparing(com.iitsm.iitsm.persistence.entity.ServiceSlaPolicyEntity::getPriority))
+                .sorted(Comparator.comparing(ServiceSlaPolicyEntity::getServiceName)
+                        .thenComparing(ServiceSlaPolicyEntity::getPriority))
                 .toList();
     }
 
@@ -59,7 +64,7 @@ public class SlaConfigurationService {
         if (service == null || service.isBlank()) throw new InvalidSlaConfigurationException("Choose a service");
         validate(responseMinutes, resolutionMinutes);
         var entity = serviceStore.findByServiceNameAndPriority(service, priority)
-                .orElse(new com.iitsm.iitsm.persistence.entity.ServiceSlaPolicyEntity(service, priority, responseMinutes, resolutionMinutes));
+                .orElse(new ServiceSlaPolicyEntity(service, priority, responseMinutes, resolutionMinutes));
         entity.setTargets(responseMinutes, resolutionMinutes);
         serviceStore.save(entity);
         SlaPolicy policy = new SlaPolicy(Duration.ofMinutes(responseMinutes), Duration.ofMinutes(resolutionMinutes));

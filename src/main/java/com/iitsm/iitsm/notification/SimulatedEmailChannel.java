@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import com.iitsm.iitsm.persistence.entity.EmailOutboxEntity;
 import com.iitsm.iitsm.repository.EmailOutboxRepository;
+import com.iitsm.iitsm.repository.AppUserRepository;
 
 /**
  * Channel 2: a simulated e-mail. It builds the real message (address, subject, body) but puts
@@ -18,9 +19,9 @@ public class SimulatedEmailChannel implements NotificationChannel {
 
     private static final Logger log = LoggerFactory.getLogger(SimulatedEmailChannel.class);
     private final EmailOutboxRepository outbox;
-    private final com.iitsm.iitsm.repository.AppUserRepository users;
+    private final AppUserRepository users;
 
-    public SimulatedEmailChannel(EmailOutboxRepository outbox, com.iitsm.iitsm.repository.AppUserRepository users) {
+    public SimulatedEmailChannel(EmailOutboxRepository outbox, AppUserRepository users) {
         this.outbox = outbox;
         this.users = users;
     }

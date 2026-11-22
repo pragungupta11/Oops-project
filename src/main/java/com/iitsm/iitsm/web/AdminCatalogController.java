@@ -19,6 +19,8 @@ import com.iitsm.iitsm.exception.CatalogException;
 import com.iitsm.iitsm.model.Incident;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.service.CategoryCatalog;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 
 /** Admin: manage IT services and incident categories. */
 @Controller
@@ -125,7 +127,7 @@ public class AdminCatalogController {
 
     private static Set<String> split(String csv) {
         if (csv == null || csv.isBlank()) return Set.of();
-        return java.util.Arrays.stream(csv.split(",")).map(String::trim).filter(x -> !x.isEmpty())
-                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        return Arrays.stream(csv.split(",")).map(String::trim).filter(x -> !x.isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 }

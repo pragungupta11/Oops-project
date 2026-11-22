@@ -27,6 +27,24 @@ import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.service.AssignmentStrategyRegistry;
 import com.iitsm.iitsm.service.SlaService;
+import com.iitsm.iitsm.exception.InvalidSlaConfigurationException;
+import com.iitsm.iitsm.persistence.entity.AuditLogEntity;
+import com.iitsm.iitsm.repository.AuditLogRepository;
+import com.iitsm.iitsm.service.CategoryCatalog;
+import com.iitsm.iitsm.service.SlaConfigurationService;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 
 /** Admin pages: all incidents with filters, verify/close, and the dashboard. */
 @Controller
@@ -41,20 +59,20 @@ public class AdminController {
     private final AssignmentStrategyRegistry strategies;
     private final UiLabels labels;
     private final ServiceCatalog serviceCatalog;
-    private final com.iitsm.iitsm.service.CategoryCatalog categoryCatalog;
+    private final CategoryCatalog categoryCatalog;
     private final IncidentConversationService conversation;
-    private final com.iitsm.iitsm.repository.AuditLogRepository auditLogs;
-    private final com.iitsm.iitsm.service.SlaConfigurationService slaConfig;
+    private final AuditLogRepository auditLogs;
+    private final SlaConfigurationService slaConfig;
 
     public AdminController(IncidentPersistenceService incidents, TechnicianPersistenceService technicians,
                            SlaService slaService, IncidentWorkflowService workflow,
                            AssignmentStrategyRegistry strategies,
                            UiLabels labels,
-                           com.iitsm.iitsm.service.SlaConfigurationService slaConfig,
-                           com.iitsm.iitsm.repository.AuditLogRepository auditLogs,
+                           SlaConfigurationService slaConfig,
+                           AuditLogRepository auditLogs,
                            IncidentConversationService conversation,
                            ServiceCatalog serviceCatalog,
-                           com.iitsm.iitsm.service.CategoryCatalog categoryCatalog) {
+                           CategoryCatalog categoryCatalog) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
@@ -97,8 +115,8 @@ public class AdminController {
                        @RequestParam(name = "page", defaultValue = "0") int page,
                        Model model) {
         String kw = keyword.trim();
-        java.time.LocalDate fromDate = parseDate(from);
-        java.time.LocalDate toDate = parseDate(to);
+        LocalDate fromDate = parseDate(from);
+        LocalDate toDate = parseDate(to);
         List<IncidentView> rows = incidents.findAll().stream()
                 .filter(i -> service.isBlank() || service.equals(i.getServiceName()))
                 .filter(i -> fromDate == null || !i.getCreatedAt().toLocalDate().isBefore(fromDate))
@@ -222,9 +240,9 @@ public class AdminController {
     /** One row of the audit log page. */
     public record AuditRow(String time, String actor, String action, String entity, String details, String change) {}
 
-    private static final java.time.format.DateTimeFormatter AUDIT_TIME =
-            java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss", java.util.Locale.ENGLISH)
-                    .withZone(java.time.ZoneId.systemDefault());
+    private static final DateTimeFormatter AUDIT_TIME =
+            DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss", Locale.ENGLISH)
+                    .withZone(ZoneId.systemDefault());
 
     static final int AUDIT_PAGE_SIZE = 100;
     static final int INCIDENT_PAGE_SIZE = 50;
@@ -237,9 +255,9 @@ public class AdminController {
     public String auditLog(@RequestParam(name = "q", defaultValue = "") String q,
                            @RequestParam(name = "page", defaultValue = "0") int page, Model model) {
         String query = q.trim();
-        org.springframework.data.domain.Pageable pageable =
-                org.springframework.data.domain.PageRequest.of(Math.max(0, page), AUDIT_PAGE_SIZE);
-        org.springframework.data.domain.Slice<com.iitsm.iitsm.persistence.entity.AuditLogEntity> slice = query.isEmpty()
+        Pageable pageable =
+                PageRequest.of(Math.max(0, page), AUDIT_PAGE_SIZE);
+        Slice<AuditLogEntity> slice = query.isEmpty()
                 ? auditLogs.findAllByOrderByOccurredAtDesc(pageable)
                 : auditLogs.search("%" + query.toLowerCase() + "%", pageable);
         List<AuditRow> rows = slice.getContent().stream()
@@ -282,7 +300,7 @@ public class AdminController {
             slaConfig.setServiceOverride(service, Priority.valueOf(priority), responseMinutes, resolutionMinutes);
             redirect.addFlashAttribute("message", service + " " + priority + ": respond within " + responseMinutes
                     + " min, resolve within " + resolutionMinutes + " min.");
-        } catch (com.iitsm.iitsm.exception.InvalidSlaConfigurationException e) {
+        } catch (InvalidSlaConfigurationException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", "Unknown priority: " + priority);
@@ -312,7 +330,7 @@ public class AdminController {
             slaConfig.update(p, responseMinutes, resolutionMinutes);
             redirect.addFlashAttribute("message", p + " now: respond within " + responseMinutes
                     + " min, resolve within " + resolutionMinutes + " min.");
-        } catch (com.iitsm.iitsm.exception.InvalidSlaConfigurationException e) {
+        } catch (InvalidSlaConfigurationException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", "Unknown priority: " + priority);
@@ -358,14 +376,14 @@ public class AdminController {
         // charts (labels in plain words) and the "needs attention" list
         model.addAttribute("statusLabels", byStatus.stream().map(b -> labels.status(b.label())).toList());
         model.addAttribute("statusCounts", byStatus.stream().map(Bar::count).toList());
-        java.util.Map<String, Long> perCategory = new java.util.LinkedHashMap<>();
+        Map<String, Long> perCategory = new LinkedHashMap<>();
         for (String c : categoryCatalog.allNames()) {
             perCategory.put(c, 0L);   // show every category, also the quiet ones
         }
         all.forEach(v -> perCategory.merge(v.category(), 1L, Long::sum));
-        model.addAttribute("categoryLabels", new java.util.ArrayList<>(perCategory.keySet()));
-        model.addAttribute("categoryCounts", new java.util.ArrayList<>(perCategory.values()));
-        java.util.Set<String> reopened = auditLogs.entityIdsWithAction("INCIDENT_REOPENED");
+        model.addAttribute("categoryLabels", new ArrayList<>(perCategory.keySet()));
+        model.addAttribute("categoryCounts", new ArrayList<>(perCategory.values()));
+        Set<String> reopened = auditLogs.entityIdsWithAction("INCIDENT_REOPENED");
         model.addAttribute("reopened", reopened);
         model.addAttribute("attention", all.stream()
                 .filter(v -> v.open() && (v.sla().equals("VIOLATED") || v.sla().equals("AT_RISK")
@@ -375,7 +393,7 @@ public class AdminController {
                 .limit(8)
                 .toList());
         model.addAttribute("avgRating", conversation.averageRating()
-                .map(r -> String.format(java.util.Locale.ENGLISH, "%.1f", r)).orElse("-"));
+                .map(r -> String.format(Locale.ENGLISH, "%.1f", r)).orElse("-"));
         model.addAttribute("ratingCount", conversation.feedbackCount());
         // Service analysis: incidents per IT service (all time, open, SLA violations)
         model.addAttribute("serviceRows", serviceCatalog.allIncludingInactive().stream()
@@ -385,7 +403,7 @@ public class AdminController {
                         count(all, v -> svc.getName().equals(v.serviceName()) && v.sla().equals("VIOLATED"))))
                 .sorted(Comparator.comparing(ServiceRow::total).reversed())
                 .toList());
-        model.addAttribute("refreshedAt", java.time.LocalTime.now().withNano(0).toString());
+        model.addAttribute("refreshedAt", LocalTime.now().withNano(0).toString());
 
         model.addAttribute("total", total);
         // "Open" counts problems: a report linked to another incident is the same problem, shown separately
@@ -403,7 +421,7 @@ public class AdminController {
     }
 
     /** Lower = more urgent: violated, escalated, reopened by the employee, then at risk. */
-    private static int attentionRank(IncidentView v, java.util.Set<String> reopened) {
+    private static int attentionRank(IncidentView v, Set<String> reopened) {
         if (v.sla().equals("VIOLATED")) return 0;
         if (!v.escalation().isEmpty() || v.technicianId().isEmpty()) return 1;   // escalated or unassigned
         if (reopened.contains(v.id())) return 2;
@@ -433,11 +451,11 @@ public class AdminController {
     }
 
     /** yyyy-MM-dd from a date input, or null when empty or invalid. */
-    private static java.time.LocalDate parseDate(String value) {
+    private static LocalDate parseDate(String value) {
         if (value == null || value.isBlank()) return null;
         try {
-            return java.time.LocalDate.parse(value.trim());
-        } catch (java.time.format.DateTimeParseException e) {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException e) {
             return null;
         }
     }

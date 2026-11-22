@@ -10,6 +10,8 @@ import com.iitsm.iitsm.exception.MissingSlaConfigurationException;
 import com.iitsm.iitsm.model.Priority;
 import com.iitsm.iitsm.model.SlaPolicy;
 import com.iitsm.iitsm.model.SlaStatus;
+import java.util.Collections;
+import java.util.TreeMap;
 
 @Service
 
@@ -84,9 +86,9 @@ public class SlaService {
     /** All overrides, for the admin page: service -> priority -> policy. */
     public Map<String, Map<Priority, SlaPolicy>> servicePolicies() {
         // a read-only copy: callers cannot change the live overrides behind the service's back
-        Map<String, Map<Priority, SlaPolicy>> copy = new java.util.TreeMap<>();
+        Map<String, Map<Priority, SlaPolicy>> copy = new TreeMap<>();
         serviceOverrides.forEach((service, m) -> copy.put(service, Map.copyOf(m)));
-        return java.util.Collections.unmodifiableMap(copy);
+        return Collections.unmodifiableMap(copy);
     }
 
     /** The policy that applies to an incident: the service override if there is one, else the default. */
