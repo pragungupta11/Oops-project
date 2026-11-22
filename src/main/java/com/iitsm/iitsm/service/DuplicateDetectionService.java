@@ -27,7 +27,11 @@ public class DuplicateDetectionService {
             if (other.getId().equals(candidate.getId())) continue;
             if (isFinished(other)) continue;
 
-            double score = similarity.score(textOf(candidate), textOf(other));
+            // Subjects are short headlines, so two headlines for the same outage match well, while
+            // free-text descriptions add many different words and dilute the score. The better
+            // of the two comparisons counts.
+            double score = Math.max(similarity.score(candidate.getSubject(), other.getSubject()),
+                                    similarity.score(textOf(candidate), textOf(other)));
             if (score >= THRESHOLD) {
                 matches.add(new DuplicateMatch(other, score));
             }

@@ -71,4 +71,27 @@ class DuplicateDetectionServiceTest {
         assertEquals("C", matches.get(0).incident().getId());
         assertEquals("B", matches.get(1).incident().getId());
     }
+
+    @Test
+    void matchingSubjectsAreFoundEvenWhenDescriptionsDiffer() {
+        Incident original = incident("A", "Customers cannot complete checkout since 10 am");
+        original.setSubject("Payment app is down");
+        Incident second = incident("B", "Customers see an error when they pay");
+        second.setSubject("Payment application unavailable");
+        Incident third = incident("C", "The pay button does nothing");
+        third.setSubject("Unable to make payment");
+
+        assertEquals(1, service.findPossibleDuplicates(second, List.of(original)).size());
+        assertEquals(2, service.findPossibleDuplicates(third, List.of(original, second)).size());
+    }
+
+    @Test
+    void differentSubjectsWithDifferentDescriptionsAreNotFlagged() {
+        Incident a = incident("A", "Customers cannot complete checkout");
+        a.setSubject("Payment app is down");
+        Incident b = incident("B", "Nobody on floor 3 can connect");
+        b.setSubject("Wifi is slow in the library");
+
+        assertTrue(service.findPossibleDuplicates(a, List.of(b)).isEmpty());
+    }
 }
