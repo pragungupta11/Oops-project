@@ -20,8 +20,8 @@
             <div class="col-md-6 mb-3">
                 <label for="category" class="form-label">Category</label>
                 <select id="category" name="category" class="form-select">
-                    <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.label()}"
-                            th:selected="${c.name() == category}"></option>
+                    <option th:each="c : ${categories}" th:value="${c}" th:text="${c}"
+                            th:selected="${c == category}"></option>
                 </select>
                 <div id="category-hint" class="form-text"></div>
             </div>

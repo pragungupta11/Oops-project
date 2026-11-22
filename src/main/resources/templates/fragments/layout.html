@@ -69,7 +69,16 @@
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/dashboard}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/incidents}"><i class="bi bi-table"></i> All incidents</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/users}"><i class="bi bi-people"></i> Users</a></li>
-            <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/sla}"><i class="bi bi-stopwatch"></i> SLA policies</a></li>
+            <li class="nav-item dropdown" th:if="${isAdmin}">
+                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-gear"></i> Configure</a>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" th:href="@{/admin/services}"><i class="bi bi-hdd-network"></i> IT services</a></li>
+                    <li><a class="dropdown-item" th:href="@{/admin/categories}"><i class="bi bi-tags"></i> Categories</a></li>
+                    <li><a class="dropdown-item" th:href="@{/admin/sla}"><i class="bi bi-stopwatch"></i> SLA policies</a></li>
+                </ul>
+            </li>
+            <li class="nav-item d-none" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/sla}"><i class="bi bi-stopwatch"></i> SLA policies</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/audit}"><i class="bi bi-journal-text"></i> Audit log</a></li>
             <li class="nav-item" th:if="${isAdmin}"><a class="nav-link" th:href="@{/admin/outbox}"><i class="bi bi-envelope"></i> Email outbox</a></li>
         </ul>

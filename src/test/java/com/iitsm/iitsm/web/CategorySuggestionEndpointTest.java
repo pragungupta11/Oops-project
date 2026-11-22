@@ -22,7 +22,7 @@ class CategorySuggestionEndpointTest {
     void suggestsApplicationForThePaymentOutage() {
         ResponseEntity<EmployeeController.SuggestionResponse> r = controller.suggestCategory("Payment app down");
         assertEquals(HttpStatus.OK, r.getStatusCode());
-        assertEquals("APPLICATION", r.getBody().category());
+        assertEquals("Application", r.getBody().category());
         assertEquals("keywords", r.getBody().source());
     }
 

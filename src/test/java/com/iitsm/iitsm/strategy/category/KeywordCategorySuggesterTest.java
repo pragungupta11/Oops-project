@@ -7,29 +7,28 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import com.iitsm.iitsm.model.Category;
 import com.iitsm.iitsm.model.CategorySuggestion;
 
 class KeywordCategorySuggesterTest {
     private final KeywordCategorySuggester suggester = new KeywordCategorySuggester();
 
-    private Category categoryFor(String text) {
+    private String categoryFor(String text) {
         return suggester.suggest(text).map(CategorySuggestion::category).orElse(null);
     }
 
     @Test
     void paymentAppProblemIsApplication() {
         // the exact case from our demo, where the employee wrongly chose Network
-        assertEquals(Category.APPLICATION, categoryFor("Payment app down"));
+        assertEquals("Application", categoryFor("Payment app down"));
     }
 
     @Test
     void recognisesEachArea() {
-        assertEquals(Category.NETWORK, categoryFor("Office wifi keeps disconnecting"));
-        assertEquals(Category.AUTHENTICATION, categoryFor("Cannot login, password reset not working"));
-        assertEquals(Category.SECURITY, categoryFor("Got a suspicious phishing email"));
-        assertEquals(Category.DATABASE, categoryFor("SQL queries are hitting a deadlock"));
-        assertEquals(Category.CLOUD, categoryFor("Files on the shared cloud drive are gone"));
+        assertEquals("Network", categoryFor("Office wifi keeps disconnecting"));
+        assertEquals("Authentication", categoryFor("Cannot login, password reset not working"));
+        assertEquals("Security", categoryFor("Got a suspicious phishing email"));
+        assertEquals("Database", categoryFor("SQL queries are hitting a deadlock"));
+        assertEquals("Cloud", categoryFor("Files on the shared cloud drive are gone"));
     }
 
     @Test

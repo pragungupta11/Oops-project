@@ -50,7 +50,7 @@ public class IncidentProcessingService {
         return new ProcessingResult(
                 priority,
                 technician,
-                slaService.responseDeadline(incident.getCreatedAt(), priority),
-                slaService.resolutionDeadline(incident.getCreatedAt(), priority));
+                slaService.responseDeadline(incident.getCreatedAt(), priority, incident.getServiceName()),
+                slaService.resolutionDeadline(incident.getCreatedAt(), priority, incident.getServiceName()));
     }
 }

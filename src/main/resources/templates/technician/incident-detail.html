@@ -123,8 +123,8 @@
                     re-route it to a technician with the right skills. You keep it until the admin decides.</p>
                 <label for="category" class="form-label">Correct category</label>
                 <select id="category" name="category" class="form-select mb-2" required>
-                    <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.label()}"
-                            th:disabled="${c.label() == incident.category()}"></option>
+                    <option th:each="c : ${categories}" th:value="${c}" th:text="${c}"
+                            th:disabled="${c == incident.category()}"></option>
                 </select>
                 <label for="reason" class="form-label">Why is the current category wrong?</label>
                 <textarea id="reason" name="reason" class="form-control mb-2" rows="2"

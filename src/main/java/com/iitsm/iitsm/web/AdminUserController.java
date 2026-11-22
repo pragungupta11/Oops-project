@@ -99,7 +99,7 @@ public class AdminUserController {
                 .toList());
         model.addAttribute("roleFilter", filter);
         model.addAttribute("rows", filter.isEmpty() ? rows : rows.stream().filter(r -> r.role().equals(filter)).toList());
-        model.addAttribute("categories", Category.values());
+        model.addAttribute("categories", accounts.skillNames());
         return "admin/users";
     }
 

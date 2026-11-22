@@ -59,7 +59,7 @@ public class EscalationService {
     }
 
     private EscalationLevel expectedLevel(Incident incident, LocalDateTime now) {
-        Duration period = slaService.getPolicy(incident.getPriority()).responseTarget();
+        Duration period = slaService.policyFor(incident.getPriority(), incident.getServiceName()).responseTarget();
         long periodsElapsed = Duration.between(incident.getCreatedAt(), now).toSeconds()
                 / period.toSeconds();
         EscalationLevel[] levels = EscalationLevel.values();

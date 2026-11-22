@@ -40,15 +40,18 @@ public class UserAccountService {
     private final AuditService auditService;
     private final TechnicianPersistenceService technicians;
     private final String emailDomain;
+    private final com.iitsm.iitsm.service.CategoryCatalog categories;
 
     public UserAccountService(AppUserRepository userRepository, PasswordEncoder passwordEncoder,
                               AuditService auditService, TechnicianPersistenceService technicians,
-                              @Value("${app.signup-email-domain:company.com}") String emailDomain) {
+                              @Value("${app.signup-email-domain:company.com}") String emailDomain,
+                              com.iitsm.iitsm.service.CategoryCatalog categories) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
         this.technicians = technicians;
         this.emailDomain = emailDomain.toLowerCase();
+        this.categories = categories;
     }
 
     public String emailDomain() {
@@ -197,11 +200,19 @@ public class UserAccountService {
         }
     }
 
-    private static Set<String> checkSkills(Set<String> skills) {
+    /** Skills a technician can have = the active categories. */
+    public java.util.List<String> skillNames() {
+        return categories.activeNames();
+    }
+
+    private Set<String> checkSkills(Set<String> skills) {
         Set<String> valid = new LinkedHashSet<>();
         if (skills != null) {
-            for (Category c : Category.values()) {
-                if (skills.contains(c.label()) || skills.contains(c.name())) valid.add(c.label());
+            for (String c : categories.activeNames()) {
+                if (skills.contains(c)) valid.add(c);
+            }
+            for (Category c : Category.values()) {   // also accept the built-in constant names
+                if (skills.contains(c.name()) && categories.activeNames().contains(c.label())) valid.add(c.label());
             }
         }
         if (valid.isEmpty()) throw new AccountException("A technician needs at least one skill");

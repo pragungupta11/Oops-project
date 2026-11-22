@@ -30,12 +30,12 @@ public class SlaMonitor {
             if (!isOpen(incident)) continue;
 
             SlaStatus response = slaService.checkResponse(
-                    incident.getCreatedAt(), incident.getPriority(),
+                    incident.getCreatedAt(), incident.getPriority(), incident.getServiceName(),
                     incident.getAcknowledgedAt(), now);
             report(incident, AlertType.RESPONSE, response, now, raised);
 
             SlaStatus resolution = slaService.checkResolution(
-                    incident.getCreatedAt(), incident.getPriority(), now);
+                    incident.getCreatedAt(), incident.getPriority(), incident.getServiceName(), now);
             report(incident, AlertType.RESOLUTION, resolution, now, raised);
         }
         return raised;

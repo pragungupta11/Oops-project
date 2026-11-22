@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('IT services')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container mb-5">
+    <div class="alert alert-success" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-hdd-network"></i> IT services</h2>
+            <div class="small text-body-secondary">Criticality feeds the priority calculation. Service-specific SLAs are set on the SLA policies page.</div>
+        </div>
+        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#addService"
+                aria-expanded="false" aria-controls="addService"><i class="bi bi-plus-lg"></i> Add service</button>
+    </div>
+
+    <div class="collapse mb-4" id="addService">
+        <div class="page">
+            <form method="post" th:action="@{/admin/services}" class="row g-3">
+                <div class="col-md-4"><label class="form-label" for="sName">Name</label>
+                    <input id="sName" class="form-control" name="name" required maxlength="60"></div>
+                <div class="col-md-3"><label class="form-label" for="sCrit">Business criticality</label>
+                    <select id="sCrit" class="form-select" name="criticality">
+                        <option value="1">1 - Low</option><option value="2" selected>2 - Medium</option><option value="3">3 - High</option>
+                    </select></div>
+                <div class="col-12">
+                    <span class="form-label d-block">Depends on</span>
+                    <div class="form-check form-check-inline" th:each="n, st : ${names}">
+                        <input class="form-check-input" type="checkbox" name="dependsOn" th:value="${n}" th:id="'dep-new-' + ${st.index}">
+                        <label class="form-check-label" th:for="'dep-new-' + ${st.index}" th:text="${n}">Intranet</label>
+                    </div>
+                </div>
+                <div class="col-12"><button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Add service</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="page p-2 table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Service</th><th>Settings</th><th>Incidents</th></tr></thead>
+            <tbody>
+            <tr th:each="r, row : ${rows}" th:classappend="${!r.active()} ? 'opacity-50' : ''">
+                <td><strong th:text="${r.name()}">Payment Gateway</strong>
+                    <span class="badge text-bg-secondary" th:unless="${r.active()}">inactive</span></td>
+                <td>
+                    <form method="post" th:action="@{/admin/services/{n}(n=${r.name()})}" class="d-flex flex-wrap align-items-center gap-2">
+                        <select class="form-select form-select-sm" style="width: auto;" name="criticality" aria-label="Criticality">
+                            <option value="1" th:selected="${r.criticality() == 1}">1 - Low</option>
+                            <option value="2" th:selected="${r.criticality() == 2}">2 - Medium</option>
+                            <option value="3" th:selected="${r.criticality() == 3}">3 - High</option>
+                        </select>
+                        <span class="small text-body-secondary">depends on:</span>
+                        <span class="form-check form-check-inline m-0" th:each="n, st : ${names}" th:if="${n != r.name()}">
+                            <input class="form-check-input" type="checkbox" name="dependsOn" th:value="${n}"
+                                   th:id="'dep-' + ${row.index} + '-' + ${st.index}" th:checked="${r.dependsOn().contains(n)}">
+                            <label class="form-check-label small" th:for="'dep-' + ${row.index} + '-' + ${st.index}" th:text="${n}">Intranet</label>
+                        </span>
+                        <span class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" name="active" value="true"
+                                   th:id="'act-' + ${row.index}" th:checked="${r.active()}">
+                            <label class="form-check-label small" th:for="'act-' + ${row.index}">active</label>
+                        </span>
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Save</button>
+                    </form>
+                </td>
+                <td><a th:href="@{/admin/incidents(service=${r.name()})}" th:text="${r.incidents()}">4</a></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

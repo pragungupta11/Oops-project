@@ -37,9 +37,9 @@
                     </select></div>
                 <div class="col-12" id="skillBox">
                     <span class="form-label d-block">Skills (technicians: at least one)</span>
-                    <div class="form-check form-check-inline" th:each="c : ${categories}">
-                        <input class="form-check-input" type="checkbox" name="skills" th:value="${c.label()}" th:id="'new-' + ${c.name()}">
-                        <label class="form-check-label" th:for="'new-' + ${c.name()}" th:text="${c.label()}">Network</label>
+                    <div class="form-check form-check-inline" th:each="c, st : ${categories}">
+                        <input class="form-check-input" type="checkbox" name="skills" th:value="${c}" th:id="'new-' + ${st.index}">
+                        <label class="form-check-label" th:for="'new-' + ${st.index}" th:text="${c}">Network</label>
                     </div>
                 </div>
                 <div class="col-12"><button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Create account</button></div>
@@ -108,10 +108,10 @@
                 <td>
                     <form th:if="${u.technician()}" method="post" class="d-flex flex-wrap align-items-center gap-2"
                           th:action="@{/admin/technicians/{id}/skills(id=${u.username()})}">
-                        <span class="form-check form-check-inline m-0" th:each="c : ${categories}">
-                            <input class="form-check-input" type="checkbox" name="skills" th:value="${c.label()}"
-                                   th:id="${u.username()} + '-' + ${c.name()}" th:checked="${u.skills().contains(c.label())}">
-                            <label class="form-check-label small" th:for="${u.username()} + '-' + ${c.name()}" th:text="${c.label()}">Network</label>
+                        <span class="form-check form-check-inline m-0" th:each="c, st : ${categories}">
+                            <input class="form-check-input" type="checkbox" name="skills" th:value="${c}"
+                                   th:id="${u.username()} + '-' + ${st.index}" th:checked="${u.skills().contains(c)}">
+                            <label class="form-check-label small" th:for="${u.username()} + '-' + ${st.index}" th:text="${c}">Network</label>
                         </span>
                         <button type="submit" class="btn btn-outline-primary btn-sm">Save skills</button>
                     </form>

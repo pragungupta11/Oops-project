@@ -1,50 +1,82 @@
 package com.iitsm.iitsm.strategy.category;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.iitsm.iitsm.model.Category;
+import com.iitsm.iitsm.model.CategoryInfo;
 import com.iitsm.iitsm.model.CategorySuggestion;
+import com.iitsm.iitsm.service.CategoryCatalog;
 
 /**
  * Rule-based suggester: counts known keywords per category and picks the category with the
  * most hits. Works offline, is instant and predictable, so it is also the safety net when
  * an AI suggester is unavailable. If two categories tie, it suggests nothing rather than guess.
+ * In the running application the keywords come from the admin's category catalogue, so new
+ * categories are suggested too; without a catalogue (unit tests) the built-in list is used.
  */
 @Component
 public class KeywordCategorySuggester implements CategorySuggester {
 
-    private static final Map<Category, Set<String>> KEYWORDS = new EnumMap<>(Category.class);
+    /** Keywords of the six built-in categories (also used to seed the catalogue). */
+    private static final Map<String, Set<String>> BUILT_IN = new LinkedHashMap<>();
 
     static {
-        KEYWORDS.put(Category.NETWORK, Set.of(
+        BUILT_IN.put("Network", Set.of(
                 "network", "wifi", "internet", "vpn", "router", "lan", "ethernet", "connection",
                 "connectivity", "dns", "bandwidth", "ping", "latency", "disconnect", "disconnecting",
                 "disconnected", "offline", "proxy", "switch", "cable"));
-        KEYWORDS.put(Category.DATABASE, Set.of(
+        BUILT_IN.put("Database", Set.of(
                 "database", "db", "sql", "query", "table", "record", "deadlock", "mysql",
                 "postgres", "postgresql", "oracle", "schema", "index", "duplicate", "corrupt", "corrupted"));
-        KEYWORDS.put(Category.APPLICATION, Set.of(
+        BUILT_IN.put("Application", Set.of(
                 "app", "application", "payment", "website", "site", "portal", "page", "button",
                 "crash", "crashed", "crashing", "bug", "screen", "form", "software", "checkout",
                 "erp", "crm", "freeze", "frozen", "hang", "hanging"));
-        KEYWORDS.put(Category.SECURITY, Set.of(
+        BUILT_IN.put("Security", Set.of(
                 "security", "phishing", "virus", "malware", "ransomware", "hacked", "hack", "breach",
                 "suspicious", "spam", "attack", "firewall", "antivirus", "leak", "leaked", "scam",
                 "unauthorised", "unauthorized"));
-        KEYWORDS.put(Category.AUTHENTICATION, Set.of(
+        BUILT_IN.put("Authentication", Set.of(
                 "login", "logon", "signin", "password", "otp", "mfa", "2fa", "locked", "lockout",
                 "account", "credential", "sso", "authentication", "username"));
-        KEYWORDS.put(Category.CLOUD, Set.of(
+        BUILT_IN.put("Cloud", Set.of(
                 "cloud", "aws", "azure", "gcp", "s3", "vm", "instance", "kubernetes", "docker",
                 "storage", "drive", "onedrive", "bucket", "saas", "container"));
+    }
+
+    /** The built-in keywords of a category, or an empty set for categories added by the admin. */
+    public static Set<String> builtInKeywords(String category) {
+        return BUILT_IN.getOrDefault(category, Set.of());
+    }
+
+    private final CategoryCatalog catalog;
+
+    /** Without a catalogue: the six built-in categories (used by unit tests). */
+    public KeywordCategorySuggester() {
+        this.catalog = null;
+    }
+
+    /** In the application: the admin's active categories and their keywords. */
+    @Autowired
+    public KeywordCategorySuggester(CategoryCatalog catalog) {
+        this.catalog = catalog;
+    }
+
+    private Map<String, Set<String>> keywords() {
+        if (catalog == null) return BUILT_IN;
+        Map<String, Set<String>> map = new LinkedHashMap<>();
+        for (CategoryInfo c : catalog.active()) {
+            map.put(c.name(), c.keywordSet());
+        }
+        return map;
     }
 
     @Override
@@ -52,10 +84,10 @@ public class KeywordCategorySuggester implements CategorySuggester {
         if (description == null || description.isBlank()) return Optional.empty();
         Set<String> words = words(description);
 
-        Category best = null;
+        String best = null;
         List<String> bestHits = List.of();
         boolean tie = false;
-        for (Map.Entry<Category, Set<String>> entry : KEYWORDS.entrySet()) {
+        for (Map.Entry<String, Set<String>> entry : keywords().entrySet()) {
             List<String> hits = new ArrayList<>();
             for (String w : words) {
                 if (entry.getValue().contains(w)) hits.add(w);

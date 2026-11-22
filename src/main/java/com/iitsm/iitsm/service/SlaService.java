@@ -66,6 +66,54 @@ public class SlaService {
         return classify(Duration.between(created, clockStop), target);
     }
 
+    // ------------------------------------------------------------------ per-service SLAs
+
+    /** Optional stricter/looser targets for one service and priority, e.g. Payment Gateway P1. */
+    private final Map<String, Map<Priority, SlaPolicy>> serviceOverrides = new ConcurrentHashMap<>();
+
+    /** Sets (or with null removes) the override of one service + priority. */
+    public void setServicePolicy(String service, Priority priority, SlaPolicy policy) {
+        if (service == null) return;
+        if (policy == null) {
+            Map<Priority, SlaPolicy> m = serviceOverrides.get(service);
+            if (m != null) m.remove(priority);
+        } else {
+            serviceOverrides.computeIfAbsent(service, k -> new ConcurrentHashMap<>()).put(priority, policy);
+        }
+    }
+
+    /** All overrides, for the admin page: service -> priority -> policy. */
+    public Map<String, Map<Priority, SlaPolicy>> servicePolicies() {
+        return serviceOverrides;
+    }
+
+    /** The policy that applies to an incident: the service override if there is one, else the default. */
+    public SlaPolicy policyFor(Priority priority, String service) {
+        if (service != null) {
+            Map<Priority, SlaPolicy> m = serviceOverrides.get(service);
+            if (m != null && m.get(priority) != null) return m.get(priority);
+        }
+        return getPolicy(priority);
+    }
+
+    public LocalDateTime responseDeadline(LocalDateTime created, Priority priority, String service) {
+        return created.plus(policyFor(priority, service).responseTarget());
+    }
+
+    public LocalDateTime resolutionDeadline(LocalDateTime created, Priority priority, String service) {
+        return created.plus(policyFor(priority, service).resolutionTarget());
+    }
+
+    public SlaStatus checkResolution(LocalDateTime created, Priority priority, String service, LocalDateTime now) {
+        return classify(Duration.between(created, now), policyFor(priority, service).resolutionTarget());
+    }
+
+    public SlaStatus checkResponse(LocalDateTime created, Priority priority, String service,
+                                   LocalDateTime acknowledgedAt, LocalDateTime now) {
+        LocalDateTime clockStop = (acknowledgedAt != null) ? acknowledgedAt : now;
+        return classify(Duration.between(created, clockStop), policyFor(priority, service).responseTarget());
+    }
+
     private SlaStatus classify(Duration elapsed, Duration target) {
         double used = (double) elapsed.toSeconds() / target.toSeconds();
         if (used >= 1.0) return SlaStatus.VIOLATED;

@@ -31,16 +31,19 @@ public class TechnicianController {
     private final SlaService slaService;
     private final IncidentTimeline timeline;
     private final IncidentConversationService conversation;
+    private final com.iitsm.iitsm.service.CategoryCatalog categories;
 
     public TechnicianController(IncidentWorkflowService workflow, IncidentPersistenceService incidents,
                                 SlaService slaService,
                                 IncidentTimeline timeline,
-                                IncidentConversationService conversation) {
+                                IncidentConversationService conversation,
+                                com.iitsm.iitsm.service.CategoryCatalog categories) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.slaService = slaService;
         this.timeline = timeline;
         this.conversation = conversation;
+        this.categories = categories;
     }
 
     /** The suspected original incident, shown next to the "Link" / "Not the same" buttons. */
@@ -72,7 +75,7 @@ public class TechnicianController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This incident is not assigned to you");
         }
         model.addAttribute("incident", IncidentView.of(incident, slaService));
-        model.addAttribute("categories", Category.values());
+        model.addAttribute("categories", categories.activeNames());
         model.addAttribute("history", timeline.forIncident(incident.getId(), true));
         model.addAttribute("thread", conversation.thread(incident.getId(), true));
         model.addAttribute("awaitingInfo", conversation.isAwaitingInfo(incident.getId()));
@@ -81,7 +84,7 @@ public class TechnicianController {
         // Acknowledging late is allowed (work must continue), but the technician should know.
         long minutesLate = 0;
         if (incident.getAcknowledgedAt() == null && incident.getPriority() != null) {
-            java.time.LocalDateTime due = slaService.responseDeadline(incident.getCreatedAt(), incident.getPriority());
+            java.time.LocalDateTime due = slaService.responseDeadline(incident.getCreatedAt(), incident.getPriority(), incident.getServiceName());
             if (java.time.LocalDateTime.now().isAfter(due)) {
                 minutesLate = Math.max(1, java.time.Duration.between(due, java.time.LocalDateTime.now()).toMinutes());
             }
@@ -159,7 +162,7 @@ public class TechnicianController {
                                       @RequestParam("reason") String reason,
                                       Authentication authentication, RedirectAttributes redirect) {
         try {
-            String label = Category.valueOf(category).label();
+            String label = categories.require(category);
             workflow.requestReassignment(id, authentication.getName(), label, reason);
             redirect.addFlashAttribute("message",
                     "Re-routing to " + label + " requested. The admin will review it; keep the incident until then.");

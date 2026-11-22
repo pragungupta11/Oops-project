@@ -33,15 +33,15 @@ public record IncidentView(String id, String description, String category, Strin
         String sla = "-";
         if (p != null && !i.isLinked()) {   // a linked report shares its parent's SLA
             if (open) {
-                sla = slaService.checkResolution(i.getCreatedAt(), p, LocalDateTime.now()).name();
+                sla = slaService.checkResolution(i.getCreatedAt(), p, i.getServiceName(), LocalDateTime.now()).name();
             } else if (i.getResolvedAt() != null) {
                 // Finished incidents keep their result: resolved in time = MET, too late = VIOLATED.
-                boolean late = i.getResolvedAt().isAfter(slaService.resolutionDeadline(i.getCreatedAt(), p));
+                boolean late = i.getResolvedAt().isAfter(slaService.resolutionDeadline(i.getCreatedAt(), p, i.getServiceName()));
                 sla = late ? "VIOLATED" : "MET";
             }
         }
-        String responseDue = p == null ? "-" : FORMAT.format(slaService.responseDeadline(i.getCreatedAt(), p));
-        String resolutionDue = p == null ? "-" : FORMAT.format(slaService.resolutionDeadline(i.getCreatedAt(), p));
+        String responseDue = p == null ? "-" : FORMAT.format(slaService.responseDeadline(i.getCreatedAt(), p, i.getServiceName()));
+        String resolutionDue = p == null ? "-" : FORMAT.format(slaService.resolutionDeadline(i.getCreatedAt(), p, i.getServiceName()));
 
         return new IncidentView(
                 i.getId(), i.getDescription(), i.getCategory(),
@@ -55,7 +55,7 @@ public record IncidentView(String id, String description, String category, Strin
                 sla, slaClass(sla),
                 orDash(i.getResolution()),
                 i.getParentId() == null ? "" : i.getParentId(),
-                p == null ? "" : slaService.resolutionDeadline(i.getCreatedAt(), p).toString(),
+                p == null ? "" : slaService.resolutionDeadline(i.getCreatedAt(), p, i.getServiceName()).toString(),
                 i.getEscalationLevel() == null || i.getEscalationLevel().name().equals("TECHNICIAN")
                         ? "" : i.getEscalationLevel().name(),
                 i.getClosedAt() == null ? "-" : FORMAT.format(i.getClosedAt())

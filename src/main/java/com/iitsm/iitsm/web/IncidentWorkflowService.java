@@ -47,6 +47,7 @@ public class IncidentWorkflowService {
     private final com.iitsm.iitsm.repository.IncidentCommentRepository comments;
     private final int maxReportsPerHour;
     private final int maxActiveIncidents;
+    private final com.iitsm.iitsm.service.CategoryCatalog categories;
 
     public IncidentWorkflowService(IncidentFactory factory,
                                    IncidentProcessingService processing,
@@ -58,7 +59,8 @@ public class IncidentWorkflowService {
                                    ApplicationEventPublisher events,
                                    com.iitsm.iitsm.repository.IncidentCommentRepository comments,
                                    @org.springframework.beans.factory.annotation.Value("${app.max-reports-per-hour:5}") int maxReportsPerHour,
-                                   @org.springframework.beans.factory.annotation.Value("${app.max-active-incidents:8}") int maxActiveIncidents) {
+                                   @org.springframework.beans.factory.annotation.Value("${app.max-active-incidents:8}") int maxActiveIncidents,
+                                   com.iitsm.iitsm.service.CategoryCatalog categories) {
         this.factory = factory;
         this.processing = processing;
         this.duplicateDetection = duplicateDetection;
@@ -70,6 +72,7 @@ public class IncidentWorkflowService {
         this.comments = comments;
         this.maxReportsPerHour = maxReportsPerHour;
         this.maxActiveIncidents = maxActiveIncidents;
+        this.categories = categories;
     }
 
     public record ReportOutcome(Incident incident, ProcessingResult result, List<DuplicateMatch> duplicates) {}
@@ -90,6 +93,15 @@ public class IncidentWorkflowService {
     @Transactional
     public ReportOutcome report(String username, String description, Category category,
                                 int impact, int urgency, String serviceName) {
+        if (category == null) throw new InvalidIncidentDataException("Category is required");
+        return report(username, description, category.label(), impact, urgency, serviceName);
+    }
+
+    /** Same, with the category by name (works for categories the admin added). */
+    @Transactional
+    public ReportOutcome report(String username, String description, String categoryName,
+                                int impact, int urgency, String serviceName) {
+        String category = categories.require(categoryName);
         if (description != null && description.length() > MAX_DESCRIPTION) {
             throw new InvalidIncidentDataException("Description must be at most " + MAX_DESCRIPTION + " characters");
         }
@@ -114,7 +126,7 @@ public class IncidentWorkflowService {
         // in the database; otherwise a new incident would overwrite an old one.
         Incident incident;
         do {
-            incident = factory.create(reporter, description, category, impact, urgency, service);
+            incident = factory.create(reporter, description, category, impact, urgency, service, LocalDateTime.now());
         } while (takenIds.contains(incident.getId()));
         incident.setReporterUsername(username);
         incident.setServiceName(service.getName());

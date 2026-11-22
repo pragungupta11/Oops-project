@@ -41,6 +41,7 @@ public class AdminController {
     private final AssignmentStrategyRegistry strategies;
     private final UiLabels labels;
     private final ServiceCatalog serviceCatalog;
+    private final com.iitsm.iitsm.service.CategoryCatalog categoryCatalog;
     private final IncidentConversationService conversation;
     private final com.iitsm.iitsm.repository.AuditLogRepository auditLogs;
     private final com.iitsm.iitsm.service.SlaConfigurationService slaConfig;
@@ -52,7 +53,8 @@ public class AdminController {
                            com.iitsm.iitsm.service.SlaConfigurationService slaConfig,
                            com.iitsm.iitsm.repository.AuditLogRepository auditLogs,
                            IncidentConversationService conversation,
-                           ServiceCatalog serviceCatalog) {
+                           ServiceCatalog serviceCatalog,
+                           com.iitsm.iitsm.service.CategoryCatalog categoryCatalog) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
@@ -63,6 +65,7 @@ public class AdminController {
         this.auditLogs = auditLogs;
         this.conversation = conversation;
         this.serviceCatalog = serviceCatalog;
+        this.categoryCatalog = categoryCatalog;
     }
 
     /** One bar on the dashboard. */
@@ -112,7 +115,7 @@ public class AdminController {
         model.addAttribute("rows", rows);
         model.addAttribute("statuses", IncidentStatus.values());
         model.addAttribute("priorities", Priority.values());
-        model.addAttribute("categories", Category.values());
+        model.addAttribute("categories", categoryCatalog.allNames());
         model.addAttribute("technicians", technicians.findAll());
         model.addAttribute("slaOptions", SLA_OPTIONS);
         model.addAttribute("selStatus", status);
@@ -120,7 +123,7 @@ public class AdminController {
         model.addAttribute("selCategory", category);
         model.addAttribute("selTech", technicianId);
         model.addAttribute("selSla", slaStatus);
-        model.addAttribute("services", serviceCatalog.all());
+        model.addAttribute("services", serviceCatalog.allIncludingInactive());
         model.addAttribute("selService", service);
         model.addAttribute("selFrom", fromDate == null ? "" : fromDate.toString());
         model.addAttribute("selTo", toDate == null ? "" : toDate.toString());
@@ -245,7 +248,39 @@ public class AdminController {
                         e.getValue().responseTarget().toMinutes(), e.getValue().resolutionTarget().toMinutes()))
                 .toList();
         model.addAttribute("rows", rows);
+        model.addAttribute("overrides", slaConfig.serviceOverrides());
+        model.addAttribute("services", serviceCatalog.allIncludingInactive());
+        model.addAttribute("priorities", Priority.values());
         return "admin/sla";
+    }
+
+    @PostMapping("/sla/service")
+    public String saveServiceSla(@RequestParam("service") String service, @RequestParam("priority") String priority,
+                                 @RequestParam("responseMinutes") long responseMinutes,
+                                 @RequestParam("resolutionMinutes") long resolutionMinutes,
+                                 RedirectAttributes redirect) {
+        try {
+            slaConfig.setServiceOverride(service, Priority.valueOf(priority), responseMinutes, resolutionMinutes);
+            redirect.addFlashAttribute("message", service + " " + priority + ": respond within " + responseMinutes
+                    + " min, resolve within " + resolutionMinutes + " min.");
+        } catch (com.iitsm.iitsm.exception.InvalidSlaConfigurationException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", "Unknown priority: " + priority);
+        }
+        return "redirect:/admin/sla";
+    }
+
+    @PostMapping("/sla/service/remove")
+    public String removeServiceSla(@RequestParam("service") String service, @RequestParam("priority") String priority,
+                                   RedirectAttributes redirect) {
+        try {
+            slaConfig.removeServiceOverride(service, Priority.valueOf(priority));
+            redirect.addFlashAttribute("message", service + " " + priority + " uses the default SLA again.");
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", "Unknown priority: " + priority);
+        }
+        return "redirect:/admin/sla";
     }
 
     @PostMapping("/sla/{priority}")
@@ -305,8 +340,8 @@ public class AdminController {
         model.addAttribute("statusLabels", byStatus.stream().map(b -> labels.status(b.label())).toList());
         model.addAttribute("statusCounts", byStatus.stream().map(Bar::count).toList());
         java.util.Map<String, Long> perCategory = new java.util.LinkedHashMap<>();
-        for (com.iitsm.iitsm.model.Category c : com.iitsm.iitsm.model.Category.values()) {
-            perCategory.put(c.label(), 0L);   // show every category, also the quiet ones
+        for (String c : categoryCatalog.allNames()) {
+            perCategory.put(c, 0L);   // show every category, also the quiet ones
         }
         all.forEach(v -> perCategory.merge(v.category(), 1L, Long::sum));
         model.addAttribute("categoryLabels", new java.util.ArrayList<>(perCategory.keySet()));
@@ -327,7 +362,7 @@ public class AdminController {
                 .map(r -> String.format(java.util.Locale.ENGLISH, "%.1f", r)).orElse("-"));
         model.addAttribute("ratingCount", conversation.feedbackCount());
         // Service analysis: incidents per IT service (all time, open, SLA violations)
-        model.addAttribute("serviceRows", serviceCatalog.all().stream()
+        model.addAttribute("serviceRows", serviceCatalog.allIncludingInactive().stream()
                 .map(svc -> new ServiceRow(svc.getName(), svc.getCriticality(),
                         count(all, v -> svc.getName().equals(v.serviceName())),
                         count(all, v -> svc.getName().equals(v.serviceName()) && v.open()),

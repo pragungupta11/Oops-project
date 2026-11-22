@@ -31,6 +31,7 @@ public class EmployeeController {
     private final IncidentWorkflowService workflow;
     private final IncidentPersistenceService incidents;
     private final ServiceCatalog catalog;
+    private final com.iitsm.iitsm.service.CategoryCatalog categories;
     private final SlaService slaService;
     private final CategorySuggester categorySuggester;
     private final IncidentTimeline timeline;
@@ -42,7 +43,8 @@ public class EmployeeController {
                               CategorySuggester categorySuggester,
                               IncidentTimeline timeline,
                               IncidentConversationService conversation,
-                              com.iitsm.iitsm.service.AutoCloseJob autoClose) {
+                              com.iitsm.iitsm.service.AutoCloseJob autoClose,
+                              com.iitsm.iitsm.service.CategoryCatalog categories) {
         this.workflow = workflow;
         this.incidents = incidents;
         this.catalog = catalog;
@@ -51,6 +53,7 @@ public class EmployeeController {
         this.timeline = timeline;
         this.conversation = conversation;
         this.autoClose = autoClose;
+        this.categories = categories;
     }
 
     /** What the report form shows under the category box. */
@@ -64,7 +67,7 @@ public class EmployeeController {
     @ResponseBody
     public ResponseEntity<SuggestionResponse> suggestCategory(@RequestParam("description") String description) {
         return categorySuggester.suggest(description)
-                .map(s -> ResponseEntity.ok(new SuggestionResponse(s.category().name(), s.category().label(),
+                .map(s -> ResponseEntity.ok(new SuggestionResponse(s.category(), s.category(),
                         s.source(), s.reason())))
                 .orElse(ResponseEntity.noContent().build());
     }
@@ -77,7 +80,7 @@ public class EmployeeController {
 
     @GetMapping("/report")
     public String reportForm(Model model) {
-        fillForm(model, "", Category.NETWORK.name(), 2, 2, catalog.all().get(0).getName());
+        fillForm(model, "", categories.activeNames().get(0), 2, 2, catalog.all().get(0).getName());
         return "employee/report";
     }
 
@@ -92,7 +95,7 @@ public class EmployeeController {
                          RedirectAttributes redirect) {
         try {
             IncidentWorkflowService.ReportOutcome outcome = workflow.report(
-                    authentication.getName(), description, Category.valueOf(category),
+                    authentication.getName(), description, category,
                     impact, urgency, serviceName);
 
             String me = authentication.getName();
@@ -217,7 +220,7 @@ public class EmployeeController {
 
     private void fillForm(Model model, String description, String category,
                           int impact, int urgency, String serviceName) {
-        model.addAttribute("categories", Category.values());
+        model.addAttribute("categories", categories.activeNames());
         model.addAttribute("services", catalog.all());
         model.addAttribute("description", description);
         model.addAttribute("category", category);
