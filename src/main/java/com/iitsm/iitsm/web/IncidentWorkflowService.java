@@ -229,6 +229,32 @@ public class IncidentWorkflowService {
         return maxActiveIncidents;
     }
 
+    private static final Set<IncidentStatus> ACTIVE_WORK =
+            java.util.EnumSet.of(IncidentStatus.ASSIGNED, IncidentStatus.ACKNOWLEDGED, IncidentStatus.IN_PROGRESS);
+
+    /**
+     * Self-correction of the stored workload counters: recounts each technician's active incidents
+     * (assigned, acknowledged or in progress; linked reports excluded) and fixes any counter that
+     * drifted, e.g. after two actions at the same moment. Returns how many counters were corrected.
+     */
+    @Transactional
+    public int reconcileWorkload() {
+        java.util.Map<String, Long> actual = incidents.findAll().stream()
+                .filter(i -> i.getAssignedTechnician() != null && !i.isLinked() && ACTIVE_WORK.contains(i.getStatus()))
+                .collect(Collectors.groupingBy(i -> i.getAssignedTechnician().getId(), Collectors.counting()));
+        int corrected = 0;
+        for (Technician t : technicians.findAll()) {
+            int real = actual.getOrDefault(t.getId(), 0L).intValue();
+            if (t.getActiveIncidents() != real) {
+                technicians.save(new Technician(t.getId(), t.getName(), t.getSkills(), real, t.isAvailable()));
+                audit.record("WORKLOAD_CORRECTED", "TECHNICIAN", t.getId(),
+                        "Active incidents counter " + t.getActiveIncidents() + " -> " + real);
+                corrected++;
+            }
+        }
+        return corrected;
+    }
+
     /** Technician confirms he has seen the incident: ASSIGNED -> ACKNOWLEDGED. */
     @Transactional
     public Incident acknowledge(String incidentId, String technicianId) {
@@ -347,10 +373,24 @@ public class IncidentWorkflowService {
         incident.setResolution(null);
 
         Technician tech = incident.getAssignedTechnician();
+        String handedOver = null;
         if (tech != null) {
-            Technician fresh = technicians.findById(tech.getId());
-            fresh.incrementActiveIncidents();
-            technicians.save(fresh);
+            Technician original = technicians.findById(tech.getId());
+            Technician next = original;
+            if (!original.isAvailable()) {
+                // The original technician left or is on leave: give it to an available skilled one.
+                try {
+                    next = pickWithinLimit(incident.getCategory(), technicians.findAll().stream()
+                            .filter(t -> !t.getId().equals(original.getId())).toList());
+                    incident.setAssignedTechnician(next);
+                    incident.transitionTo(IncidentStatus.ASSIGNED);   // the new technician must acknowledge it
+                    handedOver = next.getId();
+                } catch (TechnicianUnavailableException nobody) {
+                    next = original;   // stays listed under "Waiting for a technician" for the admin
+                }
+            }
+            next.incrementActiveIncidents();
+            technicians.save(next);
         }
         Incident saved = incidents.save(incident);
 
@@ -366,7 +406,8 @@ public class IncidentWorkflowService {
         comments.save(new com.iitsm.iitsm.persistence.entity.IncidentCommentEntity(incidentId, employee, "EMPLOYEE",
                 com.iitsm.iitsm.model.CommentKind.MESSAGE, "Still not fixed: " + why));
         audit.record("INCIDENT_REOPENED", "INCIDENT", incidentId,
-                "Reopened by " + employee + ": " + why + (previousFix == null ? "" : " (previous fix: " + previousFix + ")"));
+                "Reopened by " + employee + ": " + why + (previousFix == null ? "" : " (previous fix: " + previousFix + ")")
+                        + (handedOver == null ? "" : "; original technician unavailable, handed over to " + handedOver));
         events.publishEvent(new IncidentEvent(IncidentEventType.REOPENED, saved));
         return saved;
     }
@@ -448,6 +489,10 @@ public class IncidentWorkflowService {
         Incident incident = incidents.findById(incidentId);
         if (incident.isFinished()) {
             throw new InvalidIncidentDataException("Only open incidents can change priority");
+        }
+        if (incident.isLinked()) {
+            throw new InvalidIncidentDataException(incidentId + " follows " + incident.getParentId()
+                    + "; change the priority of " + incident.getParentId() + " instead");
         }
         com.iitsm.iitsm.model.Priority old = incident.getPriority();
         if (old == newPriority) {
@@ -716,8 +761,16 @@ public class IncidentWorkflowService {
         return saved;
     }
 
-    /** Moves a linked report forward, one legal step at a time, until it matches its parent. */
+    /**
+     * Keeps a linked report in step with its parent: forward one legal step at a time, and back to
+     * ASSIGNED when the parent went back there (handover or re-routing to a new technician).
+     */
     private void catchUpWithParent(Incident child, Incident parent) {
+        if (parent.getStatus() == IncidentStatus.ASSIGNED
+                && (child.getStatus() == IncidentStatus.ACKNOWLEDGED || child.getStatus() == IncidentStatus.IN_PROGRESS)) {
+            child.transitionTo(IncidentStatus.ASSIGNED);   // legal: ACKNOWLEDGED/IN_PROGRESS -> ASSIGNED
+            return;
+        }
         int target = HAPPY_PATH.indexOf(parent.getStatus());
         int current = HAPPY_PATH.indexOf(child.getStatus());
         while (current < target) {

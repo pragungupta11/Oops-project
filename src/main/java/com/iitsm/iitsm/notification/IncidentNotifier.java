@@ -102,8 +102,11 @@ public class IncidentNotifier implements SlaAlertListener, EscalationListener {
         if (i == null) return;
         String what = alert.type().name().toLowerCase() + " target";
         if (alert.status() == SlaStatus.AT_RISK) {
-            send(technicianId(i), "SLA at risk: " + i.getId(),
-                    "The " + what + " of " + i.getId() + " is close to its deadline.", i.getId());
+            List<String> who = technicianId(i) != null ? List.of(technicianId(i))
+                    : notifications.adminUsernames();   // queued, nobody assigned yet: tell the admins
+            sendAll(who, "SLA at risk: " + i.getId(),
+                    "The " + what + " of " + i.getId() + " is close to its deadline"
+                            + (technicianId(i) == null ? " and it is still waiting for a technician." : "."), i.getId());
         } else if (alert.status() == SlaStatus.VIOLATED) {
             List<String> who = new ArrayList<>(notifications.adminUsernames());
             who.add(technicianId(i));

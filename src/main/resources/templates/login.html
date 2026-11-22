@@ -28,6 +28,9 @@
             <div class="alert alert-danger py-2" th:if="${param.error}">
                 <i class="bi bi-exclamation-triangle"></i> Wrong username or password.
             </div>
+            <div class="alert alert-warning py-2" th:if="${param.deactivated}">
+                <i class="bi bi-person-x"></i> Your account has been deactivated. Please contact the IT administrator.
+            </div>
             <div class="alert alert-success py-2" th:if="${registered}">
                 <i class="bi bi-check-circle"></i> Account <strong th:text="${registered}">user</strong> created. Please sign in.
             </div>

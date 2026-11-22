@@ -372,7 +372,9 @@ public class AdminController {
         model.addAttribute("refreshedAt", java.time.LocalTime.now().withNano(0).toString());
 
         model.addAttribute("total", total);
-        model.addAttribute("open", total - resolvedOrDone);
+        // "Open" counts problems: a report linked to another incident is the same problem, shown separately
+        model.addAttribute("open", count(all, v -> v.open() && !v.linked()));
+        model.addAttribute("openLinked", count(all, v -> v.open() && v.linked()));
         model.addAttribute("atRisk", count(all, v -> v.sla().equals("AT_RISK")));
         model.addAttribute("violated", count(all, v -> v.sla().equals("VIOLATED")));
         model.addAttribute("awaitingVerify", count(all, v -> v.status().equals("RESOLVED")));

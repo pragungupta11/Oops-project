@@ -62,6 +62,7 @@ public class AdminUserController {
 
     @GetMapping("/users")
     public String list(@RequestParam(name = "role", defaultValue = "") String role, Model model) {
+        workflow.reconcileWorkload();   // workload numbers on this page are always the real ones
         Map<String, Technician> techs = technicians.findAll().stream()
                 .collect(Collectors.toMap(Technician::getId, Function.identity()));
         List<UserRow> rows = users.findAll().stream()

@@ -31,7 +31,8 @@
         </div>
         <div class="col-6 col-md">
             <div class="card stat-card h-100"><div class="card-body d-flex justify-content-between">
-                <div><div class="fs-2 fw-semibold" th:text="${open}">0</div><div class="text-body-secondary small">Open</div></div>
+                <div><div class="fs-2 fw-semibold" th:text="${open}">0</div><div class="text-body-secondary small">Open problems
+                    <span th:if="${openLinked > 0}" th:text="'(+' + ${openLinked} + ' linked report' + (${openLinked} > 1 ? 's' : '') + ')'">(+1 linked report)</span></div></div>
                 <i class="bi bi-hourglass-split stat-icon text-info"></i></div></div>
         </div>
         <div class="col-6 col-md">

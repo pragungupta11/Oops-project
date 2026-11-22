@@ -18,7 +18,10 @@ public class AppUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        AppUserEntity account = userRepository.findByUsername(username)
+        // Usernames are case-insensitive: "Riya" and "riya" are the same account.
+        String typed = username == null ? "" : username.trim();
+        AppUserEntity account = userRepository.findByUsername(typed.toLowerCase())
+                .or(() -> userRepository.findByUsername(typed))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
         return User.withUsername(account.getUsername())
                 .password(account.getPassword())
