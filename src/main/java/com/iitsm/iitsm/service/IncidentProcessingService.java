@@ -15,7 +15,8 @@ import org.springframework.stereotype.Service;
 @Service
 
 public class IncidentProcessingService {
-    private final PriorityStrategy priorityStrategy;
+    // volatile: the admin may switch strategies while other requests are being processed
+    private volatile PriorityStrategy priorityStrategy;
     private volatile AssignmentStrategy assignmentStrategy;
     private final SlaService slaService;
 
@@ -28,6 +29,15 @@ public class IncidentProcessingService {
     }
 
     /** Lets an admin switch the assignment algorithm at runtime. */
+    /** Lets an admin switch how priority is calculated for new incidents. */
+    public void setPriorityStrategy(PriorityStrategy priorityStrategy) {
+        this.priorityStrategy = priorityStrategy;
+    }
+
+    public PriorityStrategy getPriorityStrategy() {
+        return priorityStrategy;
+    }
+
     public void setAssignmentStrategy(AssignmentStrategy assignmentStrategy) {
         this.assignmentStrategy = assignmentStrategy;
     }

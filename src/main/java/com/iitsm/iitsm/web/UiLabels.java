@@ -44,6 +44,15 @@ public class UiLabels {
         };
     }
 
+    public String priorityStrategy(String name) {
+        if (name == null) return "-";
+        return switch (name) {
+            case "scoreBased" -> "Score: impact × urgency × criticality";
+            case "weighted" -> "Weighted: impact counts most";
+            default -> name;
+        };
+    }
+
     public String escalation(String code) {
         if (code == null || code.isEmpty()) return "";
         return switch (code) {

@@ -71,7 +71,7 @@ Usernames are case-insensitive.
 - Users: create employees, technicians (with skills) and admins; deactivate accounts (open
   incidents are handed over); set technicians available/unavailable; assign queued incidents.
 - Configure IT services (criticality, dependencies), incident categories (with suggester keywords),
-  SLA policies per priority and service-specific SLAs, and the assignment strategy.
+  SLA policies per priority and service-specific SLAs, the assignment strategy and the priority strategy.
 - Audit log (paginated, searchable) and simulated e-mail outbox.
 
 ## Incident lifecycle
@@ -89,8 +89,11 @@ within 3 days (`app.auto-close-after`) it closes automatically; the admin can ov
 
 ## Key rules
 
-- **Priority** = impact × urgency × the affected service's business criticality (each 1-3);
-  18+ = P1, 9+ = P2, 4+ = P3, otherwise P4. Admins can change it with a reason.
+- **Priority** (default, score-based) = impact × urgency × the affected service's business criticality
+  (each 1-3); 18+ = P1, 9+ = P2, 4+ = P3, otherwise P4. Alternative **weighted** strategy:
+  0.5 × impact + 0.3 × urgency + 0.2 × criticality; 2.6+ = P1, 2.0+ = P2, 1.5+ = P3, otherwise P4.
+  The admin switches strategies on the dashboard (new incidents only; saved and audited) and can
+  change one incident's priority with a reason.
 - **Assignment**: skill-based (default) or load-based strategy, switchable at runtime and saved.
   Technicians at the workload limit (8 active incidents, `app.max-active-incidents`) are skipped.
   If nobody fits, the report is **queued** (never lost) and assigned automatically when someone is free.

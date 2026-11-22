@@ -26,6 +26,7 @@ import com.iitsm.iitsm.model.Technician;
 import com.iitsm.iitsm.persistence.service.IncidentPersistenceService;
 import com.iitsm.iitsm.persistence.service.TechnicianPersistenceService;
 import com.iitsm.iitsm.service.AssignmentStrategyRegistry;
+import com.iitsm.iitsm.service.PriorityStrategyRegistry;
 import com.iitsm.iitsm.service.SlaService;
 import com.iitsm.iitsm.exception.InvalidSlaConfigurationException;
 import com.iitsm.iitsm.persistence.entity.AuditLogEntity;
@@ -57,6 +58,7 @@ public class AdminController {
     private final SlaService slaService;
     private final IncidentWorkflowService workflow;
     private final AssignmentStrategyRegistry strategies;
+    private final PriorityStrategyRegistry priorityStrategies;
     private final UiLabels labels;
     private final ServiceCatalog serviceCatalog;
     private final CategoryCatalog categoryCatalog;
@@ -72,7 +74,8 @@ public class AdminController {
                            AuditLogRepository auditLogs,
                            IncidentConversationService conversation,
                            ServiceCatalog serviceCatalog,
-                           CategoryCatalog categoryCatalog) {
+                           CategoryCatalog categoryCatalog,
+                           PriorityStrategyRegistry priorityStrategies) {
         this.incidents = incidents;
         this.technicians = technicians;
         this.slaService = slaService;
@@ -84,6 +87,7 @@ public class AdminController {
         this.conversation = conversation;
         this.serviceCatalog = serviceCatalog;
         this.categoryCatalog = categoryCatalog;
+        this.priorityStrategies = priorityStrategies;
     }
 
     /** One bar on the dashboard. */
@@ -417,6 +421,8 @@ public class AdminController {
         model.addAttribute("techs", techs);
         model.addAttribute("strategyNames", new TreeSet<>(strategies.availableNames()));
         model.addAttribute("activeStrategy", strategies.currentName());
+        model.addAttribute("priorityStrategyNames", new TreeSet<>(priorityStrategies.availableNames()));
+        model.addAttribute("activePriorityStrategy", priorityStrategies.currentName());
         return "admin/dashboard";
     }
 
@@ -433,6 +439,19 @@ public class AdminController {
         try {
             strategies.switchTo(name);
             redirect.addFlashAttribute("message", "New incidents will now be assigned using: " + labels.strategy(name));
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/admin/dashboard";
+    }
+
+    /** Switch how the priority of NEW incidents is calculated; existing incidents keep theirs. */
+    @PostMapping("/priority-strategy")
+    public String switchPriorityStrategy(@RequestParam("name") String name, RedirectAttributes redirect) {
+        try {
+            priorityStrategies.switchTo(name);
+            redirect.addFlashAttribute("message", "New incidents will now be prioritised with: "
+                    + labels.priorityStrategy(name) + ". Existing incidents keep their priority.");
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }

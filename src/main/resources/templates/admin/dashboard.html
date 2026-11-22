@@ -169,6 +169,18 @@
                     </select>
                     <button type="submit" class="btn btn-primary">Switch</button>
                 </form>
+
+                <hr class="my-4">
+                <h5 class="mb-1"><i class="bi bi-sort-down"></i> Priority calculation</h5>
+                <p class="text-body-secondary small">How the priority of new incidents is calculated. Existing incidents keep theirs.</p>
+                <p class="mb-2">Currently: <span class="badge text-bg-primary" th:text="${@labels.priorityStrategy(activePriorityStrategy)}">Score</span></p>
+                <form class="d-flex gap-2" method="post" th:action="@{/admin/priority-strategy}">
+                    <select class="form-select" name="name" id="prioritySelect">
+                        <option th:each="n : ${priorityStrategyNames}" th:value="${n}" th:text="${@labels.priorityStrategy(n)}"
+                                th:selected="${n == activePriorityStrategy}"></option>
+                    </select>
+                    <button type="submit" class="btn btn-primary">Switch</button>
+                </form>
             </div>
         </div>
     </div>
@@ -220,7 +232,7 @@
 
         // Live dashboard: reload every 30 s, but never while the admin is choosing a strategy.
         setInterval(() => {
-            if (document.activeElement && document.activeElement.id === 'strategySelect') return;
+            if (document.activeElement && ['strategySelect', 'prioritySelect'].includes(document.activeElement.id)) return;
             window.location.reload();
         }, 30000);
     })();
