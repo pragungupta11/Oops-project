@@ -25,9 +25,7 @@ public class DatabaseIncidentSource implements IncidentSource {
 
     @Override
     public List<Incident> findOpenIncidents() {
-        return incidents.findAll().stream()
-                .filter(i -> !FINISHED.contains(i.getStatus()))
-                .toList();
+        return incidents.findOpen();   // the database filters, not Java
     }
 
     @Override

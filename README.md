@@ -1,31 +1,30 @@
-# I-ITSM: Incident and IT Service Management
+# IncidentIQ: Intelligent IT Service Management and Incident Resolution
 
-A Spring Boot web application for reporting, classifying, assigning and resolving IT incidents.
-Employees report problems, the system prioritises and assigns them to a technician automatically,
-technicians work them through a fixed lifecycle, and admins monitor everything on a dashboard.
+A Spring Boot web application that manages the full lifecycle of IT incidents:
+**report → classify → prioritise → assign → investigate → resolve → verify → close.**
+Employees report problems, the system prioritises them and assigns a suitable technician
+automatically, technicians work them through an enforced lifecycle, SLAs are monitored in the
+background, and admins monitor and configure everything from a live dashboard.
 
-Built for the CS F213 / MAC F212 Object-Oriented Programming group project.
+Built for the CS F213 / MAC F212 Object-Oriented Programming group project (Semester I, 2026-27).
 
 ## Requirements
 
 - Java 17 or newer
 - Nothing else to install: the Maven wrapper (`mvnw`) downloads Maven and all libraries on first run
+- An internet connection in the browser (Bootstrap, icons and charts load from a CDN)
 
 ## Run the app
-
-From the project folder:
 
 ```
 ./mvnw spring-boot:run
 ```
 
-On Windows you can also double-click `run.bat`.
+On Windows you can also double-click `run.bat`. Wait for `Started IitsmApplication`, then open
+<http://localhost:8080>. Press `Ctrl+C` to stop.
 
-Wait for the line `Started IitsmApplication`, then open <http://localhost:8080>.
-Press `Ctrl+C` in the terminal to stop the app.
-
-Data is stored in a local H2 database file in the `data/` folder, so incidents survive restarts.
-To start from a clean database, stop the app and delete the `data/` folder.
+Data is stored in an H2 database file in `data/`, so it survives restarts. To start from a clean
+database, stop the app and delete the `data/` folder; demo accounts and defaults are recreated.
 
 ## Run the tests
 
@@ -33,34 +32,47 @@ To start from a clean database, stop the app and delete the `data/` folder.
 ./mvnw test
 ```
 
-## Demo logins
+160+ JUnit tests: unit tests for the domain rules, patterns and strategies, and Spring integration
+tests that run against a temporary in-memory database (they never touch `data/`).
 
-| Role | Username | Password |
-|------|----------|----------|
-| Employee | `employee1`, `employee2` | `Demo@1234` |
-| Technician | `tech1`, `tech2`, `tech3` | `Demo@1234` |
-| Admin | `admin` | `ChangeMe123!` |
+## Demo accounts
 
-Technician skills: `tech1` Network and Security; `tech2` Database and Application;
-`tech3` Authentication, Cloud and Network.
+| Role | Username | Password | Notes |
+|------|----------|----------|-------|
+| Employee | `employee1`, `employee2` | `Demo@1234` | New employees can also sign up |
+| Technician | `tech1` (Ravi) | `Demo@1234` | Network, Security |
+| Technician | `tech2` (Meera) | `Demo@1234` | Database, Application |
+| Technician | `tech3` (Arjun) | `Demo@1234` | Authentication, Cloud, Network |
+| Admin | `admin` | `ChangeMe123!` | Set `APP_ADMIN_PASSWORD` outside local demos |
+
+Usernames are case-insensitive.
 
 ## What each role can do
 
 **Employee**
-- Report an incident: description, category, impact, urgency and the affected service.
-- The system warns about possibly duplicate open incidents, then classifies the priority (P1 to P4),
-  picks a technician by skill and workload, and sets the response and resolution deadlines.
-- See their own incidents, with status, assigned technician and SLA state.
+- Sign up with a company e-mail address (accounts are always Employee accounts).
+- Report an incident; the category is suggested automatically while typing.
+- Track own incidents: progress tracker, technician, expected resolution time, history.
+- Add information, answer the technician's questions, confirm the fix or reopen it ("still broken"),
+  and rate the service (1-5 stars).
 
 **Technician**
-- See incidents assigned to them, with SLA status and deadlines.
-- Move an incident through Acknowledge, Start work and Mark resolved (resolution notes are required).
+- Work queue sorted by deadline, with live SLA countdowns and own workload figures.
+- Acknowledge, start work and resolve; write internal investigation notes, messages to the
+  employee, or requests for more information.
+- Request re-routing when the category is wrong; confirm or dismiss duplicate suggestions.
 
 **Admin**
-- See all incidents and filter by status, priority, category, technician, SLA status and text.
-- Verify resolved incidents and close verified ones.
-- Dashboard: counts by status and priority, SLA at risk and violated, technician workload.
-- Switch the technician assignment strategy while the app runs.
+- Live dashboard (auto-refresh): open problems, SLA at risk / violated, charts, "needs attention",
+  service analysis, technician workload, employee satisfaction.
+- All incidents with 9 filters (status, priority, category, technician, SLA, service, date range,
+  text or ID), paginated; change priority (with reason); approve re-routing; close an incident
+  without the employee's confirmation (override with reason).
+- Users: create employees, technicians (with skills) and admins; deactivate accounts (open
+  incidents are handed over); set technicians available/unavailable; assign queued incidents.
+- Configure IT services (criticality, dependencies), incident categories (with suggester keywords),
+  SLA policies per priority and service-specific SLAs, and the assignment strategy.
+- Audit log (paginated, searchable) and simulated e-mail outbox.
 
 ## Incident lifecycle
 
@@ -68,31 +80,90 @@ Technician skills: `tech1` Network and Security; `tech2` Database and Applicatio
 NEW -> CLASSIFIED -> ASSIGNED -> ACKNOWLEDGED -> IN_PROGRESS -> RESOLVED -> VERIFIED -> CLOSED
 ```
 
-Illegal jumps (for example ASSIGNED straight to CLOSED) are rejected by the State pattern.
+Each status is a State class that knows its legal next statuses; anything else throws
+`InvalidStateTransitionException`. Deliberate extra transitions: ACKNOWLEDGED/IN_PROGRESS → ASSIGNED
+(handover or re-routing to a new technician) and RESOLVED → IN_PROGRESS (employee reopens).
 
-## Project structure
+Who closes: the **employee confirms** the fix (RESOLVED → VERIFIED → CLOSED); if they do not answer
+within 3 days (`app.auto-close-after`) it closes automatically; the admin can override with a reason.
 
-All code is under `src/main/java/com/iitsm/iitsm/`:
+## Key rules
+
+- **Priority** = impact × urgency × the affected service's business criticality (each 1-3);
+  18+ = P1, 9+ = P2, 4+ = P3, otherwise P4. Admins can change it with a reason.
+- **Assignment**: skill-based (default) or load-based strategy, switchable at runtime and saved.
+  Technicians at the workload limit (8 active incidents, `app.max-active-incidents`) are skipped.
+  If nobody fits, the report is **queued** (never lost) and assigned automatically when someone is free.
+- **SLA**: response and resolution targets per priority (admin-configurable), optionally per service.
+  A background job checks every open incident every minute: at-risk at 70% of the time, violated at
+  100%; alerts are never repeated (remembered in the database). Incidents resolved late count as violations.
+- **Escalation**: an unacknowledged P1 climbs one level per response period
+  (technician → team lead → system admin → IT manager), notifying the admins.
+- **Duplicates**: similar open incidents (text similarity with synonyms) are suggested, never linked
+  automatically; suspected duplicates go to the same technician; linked reports follow their parent
+  and do not count as extra workload.
+- **Workload counters** are recounted from the incidents every 5 minutes (self-correcting).
+
+## Design
+
+Layered architecture: Thymeleaf pages and controllers (`web`) → services and strategies
+(`service`, `strategy`) → domain model (`model`, `state`, `factory`) → repositories and JPA entities
+(`repository`, `persistence`) → H2 database.
 
 | Package | Purpose |
 |---------|---------|
-| `model` | Domain classes: Incident, Technician, Employee, priorities, statuses |
-| `factory` | `IncidentFactory`: validated incident creation (Factory pattern) |
+| `model` | Domain classes: `User` hierarchy, `Incident`, `Technician`, priorities, statuses |
 | `state` | One class per lifecycle status (State pattern) |
-| `strategy` | Interchangeable priority, assignment and duplicate-matching rules (Strategy pattern) |
-| `service` | Incident processing, SLA calculation, escalation, duplicate detection |
-| `persistence` | JPA entities, repositories and persistence services (H2 database) |
-| `security` | Login, password hashing and role handling (Spring Security) |
-| `web` | Controllers, page view models and the incident workflow used by the pages |
+| `factory` | `IncidentFactory`: validated incident creation (Factory pattern) |
+| `strategy` | Priority, assignment, similarity and category-suggestion strategies (Strategy pattern) |
+| `service` | Processing, SLA calculation and monitoring, escalation, duplicates, catalogues, background jobs |
+| `observer`, `notification` | SLA/escalation listeners and incident events → notification channels (Observer pattern) |
+| `repository`, `persistence` | Spring Data repositories and JPA entities (Repository pattern) |
+| `security` | Login, roles, account rules, deactivation check |
+| `web` | Controllers, view models, the incident workflow used by the pages, error handling |
 
-Pages are Thymeleaf templates in `src/main/resources/templates/` (Bootstrap 5 from a CDN,
-so the browser needs an internet connection to load the styling).
+Notifications go through every `NotificationChannel`: **in-app** (bell icon) and **simulated e-mail**
+(an outbox the admin can read, addressed to each user's registered e-mail). Adding a channel is one
+new class.
 
-## Known limitations
+## Security
 
-- Runs on one machine: the database is a local file, so separate copies of the app do not share data.
-- Demo passwords and the default admin password are in the code; change them before any real use.
-- CSRF protection is disabled and the H2 console is enabled, which is fine for a demo but not for production.
-- The scheduled SLA monitor reads from an in-memory source, so the dashboard computes SLA status on demand instead.
-- The incident id counter restarts at 1000 on every start; the web layer skips ids already in the database.
-- There is no user registration; accounts are created by the demo data initializer.
+- Spring Security login; passwords hashed with BCrypt; role-based access on every page
+- CSRF protection on every form; input validation on all forms and in the domain model
+- Self sign-up only as Employee, only with a company e-mail address (`app.signup-email-domain`),
+  reserved names blocked, strong passwords required; rate limit on reports (`app.max-reports-per-hour`)
+- Deactivated users are logged out on their next request
+- Full audit trail: who, what, when, previous and new state
+- H2 web console disabled by default (admin-only when enabled); a warning is logged when the
+  default admin password is used
+
+## Error handling
+
+Custom exceptions for each case in the brief (invalid transition, invalid incident data, technician
+unavailable, workload exceeded, missing SLA configuration, invalid SLA/catalogue/account input).
+Users see friendly pages for 400, 403, 404 and 503 (**database unavailable**, via
+`GlobalExceptionHandler`); stack traces are never shown. **Network/notification failures** are
+isolated: a failing channel is logged and skipped, and the incident action still succeeds.
+
+## Configuration (`src/main/resources/application.properties`)
+
+| Property | Default | Meaning |
+|----------|---------|---------|
+| `app.brand` | IncidentIQ | Product name shown in the UI |
+| `app.max-reports-per-hour` | 20 | Reports per employee per hour |
+| `app.max-active-incidents` | 8 | Workload limit per technician |
+| `app.auto-close-after` | 3d | Auto-close of unconfirmed resolved incidents |
+| `app.signup-email-domain` | company.com | Allowed sign-up e-mail domain |
+| `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` | admin / ChangeMe123! | Initial admin (environment variables) |
+
+## Known limitations and future work
+
+- Single instance with a local H2 file; production would use PostgreSQL (a configuration change,
+  thanks to JPA) and several instances behind a load balancer.
+- Dashboard and catalogue pages still aggregate over all incidents; production would use count
+  queries. Lists that grow with use (incidents, audit log) are paginated.
+- E-mail is simulated (outbox); there is no e-mail verification at sign-up, no password reset and no
+  lockout after repeated wrong passwords; no REST API.
+- Two reports of the same problem in the same second do not see each other as duplicates.
+- Removing a technician's skill does not move their open incidents of that category (the admin can).
+- `IncidentWorkflowService` coordinates many use cases; splitting it further is planned.

@@ -35,8 +35,17 @@
             <h1 class="h4 mt-3">That request was not valid</h1>
             <p class="text-body-secondary">Some of the information sent was missing or in the wrong format. Please go back and try again.</p>
         </div>
-        <!-- anything else, e.g. the database is unreachable -->
-        <div th:unless="${status == 403 or status == 404 or status == 400}">
+        <!-- 503: the database is unreachable (GlobalExceptionHandler) -->
+        <div th:if="${status == 503}">
+            <i class="bi bi-database-x fs-1 text-danger"></i>
+            <h1 class="h4 mt-3">The system is temporarily unavailable</h1>
+            <p class="text-body-secondary">
+                We could not reach the database. Your last action was not saved. Please try again in a few minutes;
+                the administrators have been informed through the error log.
+            </p>
+        </div>
+        <!-- anything else -->
+        <div th:unless="${status == 403 or status == 404 or status == 400 or status == 503}">
             <i class="bi bi-cloud-slash fs-1 text-danger"></i>
             <h1 class="h4 mt-3">Something went wrong on our side</h1>
             <p class="text-body-secondary">

@@ -108,11 +108,9 @@ public class IncidentWorkflowService {
         User reporter = new Employee(username, username, username + "@company.com", "General");
         ItService service = catalog.byName(serviceName);
 
-        List<Incident> existing = incidents.findAll();
-
         // Guardrail against floods of fake reports from one account.
         LocalDateTime hourAgo = LocalDateTime.now().minusHours(1);
-        long recent = existing.stream()
+        long recent = incidents.findByReporter(username).stream()
                 .filter(i -> username.equals(i.getReporterUsername()) && i.getCreatedAt().isAfter(hourAgo))
                 .count();
         if (recent >= maxReportsPerHour) {
@@ -120,17 +118,16 @@ public class IncidentWorkflowService {
                     + "Please add details to an existing incident, or wait a little before reporting more.");
         }
 
-        Set<String> takenIds = existing.stream().map(Incident::getId).collect(Collectors.toSet());
-
         // The factory's id counter restarts at 1000 on every app start, so skip ids already
         // in the database; otherwise a new incident would overwrite an old one.
         Incident incident;
         do {
             incident = factory.create(reporter, description, category, impact, urgency, service, LocalDateTime.now());
-        } while (takenIds.contains(incident.getId()));
+        } while (incidents.exists(incident.getId()));
         incident.setReporterUsername(username);
         incident.setServiceName(service.getName());
 
+        List<Incident> existing = incidents.findOpen();   // only open incidents can be duplicates
         List<DuplicateMatch> matches = duplicateDetection.findPossibleDuplicates(incident, existing);
         List<Technician> pool = technicians.findAll();
 
@@ -208,7 +205,7 @@ public class IncidentWorkflowService {
     @Transactional
     public int assignQueuedIncidents() {
         int assigned = 0;
-        List<Incident> queued = incidents.findAll().stream()
+        List<Incident> queued = incidents.findByStatus(IncidentStatus.CLASSIFIED).stream()
                 .filter(i -> i.getAssignedTechnician() == null && !i.isLinked() && !i.isFinished()
                         && i.getStatus() == IncidentStatus.CLASSIFIED)
                 .sorted(java.util.Comparator.comparing(Incident::getCreatedAt))
@@ -239,7 +236,7 @@ public class IncidentWorkflowService {
      */
     @Transactional
     public int reconcileWorkload() {
-        java.util.Map<String, Long> actual = incidents.findAll().stream()
+        java.util.Map<String, Long> actual = incidents.findOpen().stream()
                 .filter(i -> i.getAssignedTechnician() != null && !i.isLinked() && ACTIVE_WORK.contains(i.getStatus()))
                 .collect(Collectors.groupingBy(i -> i.getAssignedTechnician().getId(), Collectors.counting()));
         int corrected = 0;
@@ -395,8 +392,8 @@ public class IncidentWorkflowService {
         Incident saved = incidents.save(incident);
 
         // linked reports were resolved together with it, so they reopen together too
-        for (Incident child : incidents.findAll()) {
-            if (incidentId.equals(child.getParentId()) && child.getStatus() == IncidentStatus.RESOLVED) {
+        for (Incident child : incidents.findLinkedTo(incidentId)) {
+            if (child.getStatus() == IncidentStatus.RESOLVED) {
                 child.transitionTo(IncidentStatus.IN_PROGRESS);
                 child.setResolvedAt(null);
                 child.setResolution(null);
@@ -522,7 +519,7 @@ public class IncidentWorkflowService {
     public HandoverResult reassignOpenIncidentsOf(String technicianId) {
         int moved = 0;
         List<String> notMoved = new java.util.ArrayList<>();
-        for (Incident incident : incidents.findAll()) {
+        for (Incident incident : incidents.findByTechnician(technicianId)) {
             Technician current = incident.getAssignedTechnician();
             if (current == null || !current.getId().equals(technicianId)
                     || incident.isLinked() || incident.isFinished()) {
@@ -670,7 +667,7 @@ public class IncidentWorkflowService {
         if (!child.hasDuplicateSuggestion()) {
             throw new InvalidIncidentDataException("There is no duplicate suggestion for " + incidentId);
         }
-        boolean hasOwnChildren = incidents.findAll().stream().anyMatch(i -> incidentId.equals(i.getParentId()));
+        boolean hasOwnChildren = !incidents.findLinkedTo(incidentId).isEmpty();
         if (hasOwnChildren) {
             throw new InvalidIncidentDataException(incidentId
                     + " already has linked reports, so it cannot itself be linked to another incident");
@@ -743,8 +740,8 @@ public class IncidentWorkflowService {
     /** Saves an incident and brings its linked reports along (same technician, same progress). */
     private Incident saveAndCascade(Incident parent) {
         Incident saved = incidents.save(parent);
-        for (Incident child : incidents.findAll()) {
-            if (parent.getId().equals(child.getParentId())) {
+        for (Incident child : incidents.findLinkedTo(parent.getId())) {
+            {
                 IncidentStatus before = child.getStatus();
                 child.setAssignedTechnician(parent.getAssignedTechnician());
                 catchUpWithParent(child, parent);

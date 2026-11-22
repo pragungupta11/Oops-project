@@ -58,4 +58,40 @@ public class IncidentPersistenceService {
     public List<Incident> findByStatus(IncidentStatus status) {
         return incidentRepository.findByStatus(status).stream().map(IncidentEntity::toDomain).toList();
     }
+
+    private static final java.util.Set<IncidentStatus> FINISHED =
+            java.util.EnumSet.of(IncidentStatus.RESOLVED, IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
+
+    /** Incidents still being worked on (not resolved, verified or closed). */
+    @Transactional(readOnly = true)
+    public List<Incident> findOpen() {
+        return incidentRepository.findByStatusNotIn(FINISHED).stream().map(IncidentEntity::toDomain).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Incident> findByReporter(String username) {
+        return incidentRepository.findByReporterUsername(username).stream().map(IncidentEntity::toDomain).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Incident> findByTechnician(String technicianId) {
+        return incidentRepository.findByAssignedTechnician_Id(technicianId).stream().map(IncidentEntity::toDomain).toList();
+    }
+
+    /** Reports linked to the given incident. */
+    @Transactional(readOnly = true)
+    public List<Incident> findLinkedTo(String parentId) {
+        return incidentRepository.findByParentId(parentId).stream().map(IncidentEntity::toDomain).toList();
+    }
+
+    /** Incidents with a re-routing request waiting for the admin. */
+    @Transactional(readOnly = true)
+    public List<Incident> findWithPendingReassignment() {
+        return incidentRepository.findByRequestedCategoryIsNotNull().stream().map(IncidentEntity::toDomain).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean exists(String id) {
+        return incidentRepository.existsById(id);
+    }
 }

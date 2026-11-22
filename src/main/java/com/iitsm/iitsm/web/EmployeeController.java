@@ -118,8 +118,7 @@ public class EmployeeController {
 
     @GetMapping("/incidents")
     public String list(Authentication authentication, Model model) {
-        List<IncidentView> rows = incidents.findAll().stream()
-                .filter(i -> authentication.getName().equals(i.getReporterUsername()))
+        List<IncidentView> rows = incidents.findByReporter(authentication.getName()).stream()
                 .sorted(Comparator.comparing(Incident::getCreatedAt).reversed())
                 .map(i -> IncidentView.of(i, slaService))
                 .toList();

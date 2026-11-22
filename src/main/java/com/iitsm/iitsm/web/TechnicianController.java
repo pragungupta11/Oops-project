@@ -52,8 +52,7 @@ public class TechnicianController {
     @GetMapping("/incidents")
     public String list(Authentication authentication, Model model) {
         String me = authentication.getName();
-        List<IncidentView> rows = incidents.findAll().stream()
-                .filter(i -> i.getAssignedTechnician() != null && me.equals(i.getAssignedTechnician().getId()))
+        List<IncidentView> rows = incidents.findByTechnician(me).stream()
                 .map(i -> IncidentView.of(i, slaService))
                 .sorted(Comparator.comparing((IncidentView v) -> !v.open())
                         .thenComparing(IncidentView::resolutionDueIso))
@@ -105,8 +104,7 @@ public class TechnicianController {
                 // the suggested incident no longer exists; just show nothing
             }
         }
-        model.addAttribute("linkedReports", incidents.findAll().stream()
-                .filter(i -> incident.getId().equals(i.getParentId()))
+        model.addAttribute("linkedReports", incidents.findLinkedTo(incident.getId()).stream()
                 .map(Incident::getId)
                 .toList());
         return "technician/incident-detail";

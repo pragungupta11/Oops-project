@@ -94,6 +94,7 @@ public class AdminController {
                        @RequestParam(name = "service", defaultValue = "") String service,
                        @RequestParam(name = "from", defaultValue = "") String from,
                        @RequestParam(name = "to", defaultValue = "") String to,
+                       @RequestParam(name = "page", defaultValue = "0") int page,
                        Model model) {
         String kw = keyword.trim();
         java.time.LocalDate fromDate = parseDate(from);
@@ -111,6 +112,14 @@ public class AdminController {
                 .filter(v -> slaStatus.isBlank() || v.sla().equals(slaStatus))
                 .filter(v -> kw.isEmpty() || containsIgnoreCase(v.description(), kw) || containsIgnoreCase(v.id(), kw))
                 .toList();
+
+        // 50 per page, newest first
+        int pages = Math.max(1, (rows.size() + INCIDENT_PAGE_SIZE - 1) / INCIDENT_PAGE_SIZE);
+        int current = Math.min(Math.max(0, page), pages - 1);
+        model.addAttribute("total", rows.size());
+        model.addAttribute("page", current);
+        model.addAttribute("pages", pages);
+        rows = rows.subList(current * INCIDENT_PAGE_SIZE, Math.min(rows.size(), (current + 1) * INCIDENT_PAGE_SIZE));
 
         model.addAttribute("rows", rows);
         model.addAttribute("statuses", IncidentStatus.values());
@@ -130,8 +139,7 @@ public class AdminController {
         model.addAttribute("keyword", keyword);
 
         List<Technician> allTechs = technicians.findAll();
-        List<ReroutingView> rerouting = incidents.findAll().stream()
-                .filter(Incident::hasPendingReassignment)
+        List<ReroutingView> rerouting = incidents.findWithPendingReassignment().stream()
                 .map(i -> new ReroutingView(i.getId(), i.getDescription(), i.getCategory(),
                         i.getRequestedCategory(), i.getReassignmentReason(),
                         i.getAssignedTechnician() == null ? "-" : i.getAssignedTechnician().getName(),
@@ -218,21 +226,32 @@ public class AdminController {
             java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss", java.util.Locale.ENGLISH)
                     .withZone(java.time.ZoneId.systemDefault());
 
-    /** Every recorded action, newest first; optional search over all columns. Shows the latest 300. */
+    static final int AUDIT_PAGE_SIZE = 100;
+    static final int INCIDENT_PAGE_SIZE = 50;
+
+    /**
+     * Every recorded action, newest first, 100 per page; optional search over all columns.
+     * Paging and searching happen in the database, so the page stays fast as the log grows.
+     */
     @GetMapping("/audit")
-    public String auditLog(@RequestParam(name = "q", defaultValue = "") String q, Model model) {
+    public String auditLog(@RequestParam(name = "q", defaultValue = "") String q,
+                           @RequestParam(name = "page", defaultValue = "0") int page, Model model) {
         String query = q.trim();
-        List<AuditRow> rows = auditLogs.findAllByOrderByOccurredAtDesc().stream()
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), AUDIT_PAGE_SIZE);
+        org.springframework.data.domain.Slice<com.iitsm.iitsm.persistence.entity.AuditLogEntity> slice = query.isEmpty()
+                ? auditLogs.findAllByOrderByOccurredAtDesc(pageable)
+                : auditLogs.search("%" + query.toLowerCase() + "%", pageable);
+        List<AuditRow> rows = slice.getContent().stream()
                 .map(a -> new AuditRow(AUDIT_TIME.format(a.getOccurredAt()), a.getActor(), a.getAction(),
                         a.getEntityType() + " " + a.getEntityId(), a.getDetails(),
                         a.getNewState() == null ? "" : (a.getPreviousState() == null ? "(new)" : a.getPreviousState())
                                 + " → " + a.getNewState()))
-                .filter(r -> query.isEmpty() || containsIgnoreCase(r.actor(), query) || containsIgnoreCase(r.action(), query)
-                        || containsIgnoreCase(r.entity(), query) || containsIgnoreCase(r.details(), query))
-                .limit(300)
                 .toList();
         model.addAttribute("rows", rows);
         model.addAttribute("q", q);
+        model.addAttribute("page", Math.max(0, page));
+        model.addAttribute("hasNext", slice.hasNext());
         return "admin/audit";
     }
 
@@ -346,10 +365,7 @@ public class AdminController {
         all.forEach(v -> perCategory.merge(v.category(), 1L, Long::sum));
         model.addAttribute("categoryLabels", new java.util.ArrayList<>(perCategory.keySet()));
         model.addAttribute("categoryCounts", new java.util.ArrayList<>(perCategory.values()));
-        java.util.Set<String> reopened = auditLogs.findAll().stream()
-                .filter(a -> "INCIDENT_REOPENED".equals(a.getAction()))
-                .map(a -> a.getEntityId())
-                .collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> reopened = auditLogs.entityIdsWithAction("INCIDENT_REOPENED");
         model.addAttribute("reopened", reopened);
         model.addAttribute("attention", all.stream()
                 .filter(v -> v.open() && (v.sla().equals("VIOLATED") || v.sla().equals("AT_RISK")

@@ -115,7 +115,7 @@
         </div>
     </form>
 
-    <p class="text-muted" th:text="${#lists.size(rows)} + ' incident(s) shown'">0 incident(s) shown</p>
+    <p class="text-muted" th:text="${total} + ' incident(s) found' + (${pages} > 1 ? ', page ' + (${page} + 1) + ' of ' + ${pages} : '')">0 incident(s) found</p>
 
     <div class="page p-2 table-responsive">
     <table class="table table-hover table-sm align-middle mb-0">
@@ -174,6 +174,13 @@
         </tbody>
     </table>
     </div>
+    <nav class="d-flex justify-content-between mt-3" th:if="${pages > 1}" aria-label="Incident pages">
+        <a class="btn btn-outline-secondary btn-sm" th:if="${page > 0}"
+           th:href="@{/admin/incidents(status=${selStatus}, priority=${selPriority}, category=${selCategory}, technicianId=${selTech}, slaStatus=${selSla}, keyword=${keyword}, service=${selService}, from=${selFrom}, to=${selTo}, page=${page - 1})}"><i class="bi bi-chevron-left"></i> Newer</a>
+        <span th:unless="${page > 0}"></span>
+        <a class="btn btn-outline-secondary btn-sm" th:if="${page + 1 < pages}"
+           th:href="@{/admin/incidents(status=${selStatus}, priority=${selPriority}, category=${selCategory}, technicianId=${selTech}, slaStatus=${selSla}, keyword=${keyword}, service=${selService}, from=${selFrom}, to=${selTo}, page=${page + 1})}">Older <i class="bi bi-chevron-right"></i></a>
+    </nav>
 </div>
 </body>
 </html>

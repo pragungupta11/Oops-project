@@ -44,26 +44,25 @@ public class SlaService {
         return policy;
     }
 
+    // The versions without a service use the default policy of the priority (service = null).
+
     public LocalDateTime responseDeadline(LocalDateTime created, Priority priority) {
-        return created.plus(getPolicy(priority).responseTarget());
+        return responseDeadline(created, priority, null);
     }
 
     public LocalDateTime resolutionDeadline(LocalDateTime created, Priority priority) {
-        return created.plus(getPolicy(priority).resolutionTarget());
+        return resolutionDeadline(created, priority, null);
     }
 
     /** OK, AT_RISK (70% of time used) or VIOLATED (100% used), against the resolution target. */
     public SlaStatus checkResolution(LocalDateTime created, Priority priority, LocalDateTime now) {
-        Duration target = getPolicy(priority).resolutionTarget();
-        return classify(Duration.between(created, now), target);
+        return checkResolution(created, priority, null, now);
     }
 
     /** Response clock stops when the technician acknowledges. Until then it keeps running. */
     public SlaStatus checkResponse(LocalDateTime created, Priority priority,
                                    LocalDateTime acknowledgedAt, LocalDateTime now) {
-        Duration target = getPolicy(priority).responseTarget();
-        LocalDateTime clockStop = (acknowledgedAt != null) ? acknowledgedAt : now;
-        return classify(Duration.between(created, clockStop), target);
+        return checkResponse(created, priority, null, acknowledgedAt, now);
     }
 
     // ------------------------------------------------------------------ per-service SLAs
@@ -84,7 +83,10 @@ public class SlaService {
 
     /** All overrides, for the admin page: service -> priority -> policy. */
     public Map<String, Map<Priority, SlaPolicy>> servicePolicies() {
-        return serviceOverrides;
+        // a read-only copy: callers cannot change the live overrides behind the service's back
+        Map<String, Map<Priority, SlaPolicy>> copy = new java.util.TreeMap<>();
+        serviceOverrides.forEach((service, m) -> copy.put(service, Map.copyOf(m)));
+        return java.util.Collections.unmodifiableMap(copy);
     }
 
     /** The policy that applies to an incident: the service override if there is one, else the default. */

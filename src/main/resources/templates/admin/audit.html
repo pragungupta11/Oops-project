@@ -7,7 +7,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
         <div>
             <h2 class="mb-0"><i class="bi bi-journal-text"></i> Audit log</h2>
-            <div class="small text-body-secondary">Every important action: who, what, when. Records are never edited. Latest 300 shown.</div>
+            <div class="small text-body-secondary">Every important action: who, what, when. Records are never edited. 100 per page.</div>
         </div>
         <form class="d-flex gap-2" method="get" th:action="@{/admin/audit}">
             <input class="form-control" type="search" name="q" th:value="${q}" placeholder="Search: INC1001, tech2, ESCALATED..."
@@ -31,6 +31,15 @@
             </tbody>
         </table>
     </div>
+    <nav class="d-flex justify-content-between mt-3" aria-label="Audit log pages">
+        <a class="btn btn-outline-secondary btn-sm" th:if="${page > 0}"
+           th:href="@{/admin/audit(q=${q}, page=${page - 1})}"><i class="bi bi-chevron-left"></i> Newer</a>
+        <span th:unless="${page > 0}"></span>
+        <span class="small text-body-secondary align-self-center" th:text="'Page ' + ${page + 1}">Page 1</span>
+        <a class="btn btn-outline-secondary btn-sm" th:if="${hasNext}"
+           th:href="@{/admin/audit(q=${q}, page=${page + 1})}">Older <i class="bi bi-chevron-right"></i></a>
+        <span th:unless="${hasNext}"></span>
+    </nav>
 </div>
 </body>
 </html>

@@ -84,7 +84,7 @@ public class AdminUserController {
                 "EMPLOYEE", rows.stream().filter(r -> r.role().equals("EMPLOYEE")).count(),
                 "TECHNICIAN", rows.stream().filter(r -> r.role().equals("TECHNICIAN")).count()));
         // open incidents whose technician is unavailable or deactivated: the admin picks a new one
-        model.addAttribute("stuck", incidents.findAll().stream()
+        model.addAttribute("stuck", incidents.findOpen().stream()
                 .filter(i -> !i.isFinished() && !i.isLinked())
                 .filter(i -> {
                     if (i.getAssignedTechnician() == null) return true;   // waiting in the queue

@@ -18,9 +18,19 @@ public class SimulatedEmailChannel implements NotificationChannel {
 
     private static final Logger log = LoggerFactory.getLogger(SimulatedEmailChannel.class);
     private final EmailOutboxRepository outbox;
+    private final com.iitsm.iitsm.repository.AppUserRepository users;
 
-    public SimulatedEmailChannel(EmailOutboxRepository outbox) {
+    public SimulatedEmailChannel(EmailOutboxRepository outbox, com.iitsm.iitsm.repository.AppUserRepository users) {
         this.outbox = outbox;
+        this.users = users;
+    }
+
+    /** The e-mail address the user registered with; demo accounts without one use username@company.com. */
+    String addressOf(String username) {
+        return users.findByUsername(username)
+                .map(u -> u.getEmail())
+                .filter(e -> e != null && !e.isBlank())
+                .orElse(username + DOMAIN);
     }
 
     @Override
@@ -28,7 +38,7 @@ public class SimulatedEmailChannel implements NotificationChannel {
 
     @Override
     public void send(Notification n) {
-        String to = n.recipient() + DOMAIN;
+        String to = addressOf(n.recipient());
         outbox.save(new EmailOutboxEntity(to, Text.limit("[I-ITSM] " + n.subject(), 200),
                 Text.limit(n.body(), 1000)));
         log.info("[EMAIL] to={} subject={}", to, n.subject());

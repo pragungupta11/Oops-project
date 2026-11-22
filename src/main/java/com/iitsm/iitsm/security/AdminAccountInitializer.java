@@ -2,6 +2,8 @@ package com.iitsm.iitsm.security;
 
 import com.iitsm.iitsm.persistence.entity.AppUserEntity;
 import com.iitsm.iitsm.repository.AppUserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -10,6 +12,9 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class AdminAccountInitializer implements ApplicationRunner {
+    private static final Logger log = LoggerFactory.getLogger(AdminAccountInitializer.class);
+    static final String DEMO_DEFAULT = "ChangeMe123!";
+
     private final AppUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final String username;
@@ -29,6 +34,10 @@ public class AdminAccountInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         if (!userRepository.existsByUsername(username)) {
             userRepository.save(new AppUserEntity(username, passwordEncoder.encode(password), "ADMIN"));
+            if (DEMO_DEFAULT.equals(password)) {
+                log.warn("Admin account '{}' was created with the demo default password. "
+                        + "Set APP_ADMIN_PASSWORD before running this anywhere but a local demo.", username);
+            }
         }
     }
 }
